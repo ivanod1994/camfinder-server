@@ -1,1 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>CamFinder Admin</title>
+<style>
+body{background:#0d1117;color:#e6edf3;font-family:sans-serif;margin:20px;}
+table{border-collapse:collapse;width:100%;margin-top:10px;}
+th,td{border:1px solid #30363d;padding:6px;}
+button{background:#238636;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;}
+input{background:#161b22;color:#e6edf3;border:1px solid #30363d;padding:5px;border-radius:5px;}
+</style>
+</head>
+<body>
+<h2>CamFinder Admin</h2>
+
+<label>URL:</label><input id="url" value="http://127.0.0.1:8000" size="40">
+<label>Key:</label><input id="key" type="password" size="20">
+<button onclick="ping()">Ping</button><span id="status"></span>
+
+<h3>Платежи</h3>
+<button onclick="loadPayments()">Обновить</button>
+<table id="tbl">
+<thead><tr><th>ID</th><th>Device</th><th>Comment</th><th>TX</th><th>Status</th><th>Действие</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h3>Коды доступа</h3>
+<button onclick="loadCodes()">Показать коды</button>
+<pre id="codes"></pre>
+
+<script>
+async function api(path,method='GET',data=null){
+  const u=document.getElementById('url').value+path;
+  const k=document.getElementById('key').value;
+  const opt={method,headers:{'X-Admin-Key':k}};
+  if(data){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(data);}
+  const r=await fetch(u,opt);
+  if(!r.ok)throw new Error(await r.text());
+  return r.json();
+}
+async function ping(){try{await api('/api/v1/admin/ping');status.textContent='✅ OK'}catch(e){status.textContent='❌'+e.message}}
+async function loadPayments(){
+  const tb=document.querySelector('#tbl tbody');
+  const list=await api('/api/v1/admin/payments');
+  tb.innerHTML='';
+  for(const p of list){
+    tb.innerHTML+=`<tr>
+      <td>${p.id}</td><td>${p.device_id||''}</td><td>${p.comment||''}</td>
+      <td><input id="tx${p.id}" value="${p.tx_hash||''}"></td>
+      <td>${p.status}</td>
+      <td><button onclick="confirm(${p.id})">Подтв.</button></td></tr>`;
+  }
+}
+async function confirm(id){
+  const tx=document.getElementById('tx'+id).value;
+  const r=await api('/api/v1/admin/confirm','POST',{payment_id:id,tx_hash:tx});
+  alert('Код выдан: '+r.code);
+  loadPayments();
+}
+async function loadCodes(){
+  const list=await api('/api/v1/admin/codes');
+  codes.textContent=JSON.stringify(list,null,2);
+}
+</script>
+</body>
+</html>
 
