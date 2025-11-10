@@ -1,1 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Админ-панель CamFinder</title>
+<style>
+body {
+  background-color: #0d1117;
+  color: #c9d1d9;
+  font-family: "Segoe UI", sans-serif;
+  margin: 40px;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 20px;
+}
+th, td {
+  border: 1px solid #30363d;
+  padding: 8px;
+}
+th {
+  background-color: #161b22;
+}
+tr:nth-child(even) { background-color: #161b22; }
+button {
+  background-color: #238636;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  margin: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+button.delete { background-color: #d73a49; }
+button.reset { background-color: #8957e5; }
+input, select {
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  padding: 4px;
+  border-radius: 4px;
+}
+</style>
+</head>
+<body>
+<h2>👑 Панель администратора CamFinder</h2>
+<form method="POST">
+  <label>Пароль администратора:</label>
+  <input type="password" name="password" required>
+  <br><br>
+  <label>Device ID:</label>
+  <input type="text" name="device_id" required>
+  <br><br>
+  <label>Действие:</label>
+  <select name="action">
+    <option value="activate">Активировать подписку</option>
+    <option value="reset_free">Сбросить бесплатные попытки</option>
+    <option value="delete">Удалить запись</option>
+  </select>
+  <label>Дней:</label>
+  <input type="number" name="days" value="30" style="width:60px">
+  <br><br>
+  <button type="submit">Выполнить</button>
+</form>
+
+<h3>Список устройств</h3>
+<table>
+<tr><th>Device ID</th><th>Active</th><th>Expires</th><th>Free left</th><th>Pending TX</th></tr>
+{% for device_id, info in devices %}
+<tr>
+  <td>{{ device_id }}</td>
+  <td>{{ info.active }}</td>
+  <td>{{ info.expires_at }}</td>
+  <td>{{ info.free_left }}</td>
+  <td>{{ info.pending_tx if info.pending_tx else '' }}</td>
+</tr>
+{% endfor %}
+</table>
+</body>
+</html>
 
