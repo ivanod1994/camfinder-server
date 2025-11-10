@@ -1,274 +1,186 @@
-#!/usr/bin/env python3
+# server.py
+# Flask сервер для CamGirlsFinder
+# Поддерживает:
+#  - хранение активных подписок и оставшихся бесплатных попыток
+#  - выдачу статуса (GET /api/subscriptions/status)
+#  - списание попытки (POST /api/subscriptions/consume)
+#  - создание заявки (POST /api/verify_payment)
+#  - админ-панель /admin (templates/admin.html)
+# Совместим с Railway + gunicorn
+
 import os
-import sqlite3
-from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, send_from_directory, render_template
+import json
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from threading import Lock
 
-# -----------------------------
-# Configuration
-# -----------------------------
-ADMIN_KEY = os.getenv("ADMIN_KEY", "MASTER112")     # Admin secret
-APP_NAME  = os.getenv("APP_NAME",  "camfinder-server")
-PORT      = int(os.getenv("PORT", "8000"))
-DB_PATH   = os.getenv("DATABASE_URL", "database.db")  # sqlite file path on Railway
+app = Flask(__name__, template_folder="templates")
+CORS(app)
 
-# -----------------------------
-# App init
-# -----------------------------
-app = Flask(__name__, template_folder="templates", static_folder="static")
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+DATA_FILE = "subscriptions.json"
+ADMIN_PASSWORD = "Ledevi3656610208"
+DEV_CODE = "MASTER112"
+SUBSCRIPTION_DAYS = 30
+FREE_TRIES = 3
 
-def now_utc():
-    return datetime.now(timezone.utc)
+_lock = Lock()
 
-# -----------------------------
-# DB helpers
-# -----------------------------
-def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except Exception:
+            return {}
 
-def init_db():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS devices(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id TEXT UNIQUE,
-        created_ts TEXT
-    );
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS subscriptions(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id TEXT,
-        is_active INTEGER DEFAULT 0,
-        is_dev INTEGER DEFAULT 0,
-        start_ts TEXT,
-        end_ts TEXT,
-        created_ts TEXT,
-        updated_ts TEXT
-    );
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS payments(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_id TEXT,
-        tx TEXT,
-        comment TEXT,
-        status TEXT,              -- pending/approved/rejected
-        amount REAL,
-        currency TEXT,
-        created_ts TEXT
-    );
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS audit_log(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts TEXT,
-        action TEXT,
-        who_ip TEXT,
-        meta TEXT
-    );
-    """)
-    conn.commit()
-    conn.close()
+def save_data(data):
+    with _lock:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
-def log_audit(action, meta=""):
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO audit_log(ts, action, who_ip, meta) VALUES (?, ?, ?, ?)",
-        (now_utc().isoformat(), action, request.remote_addr or "-", meta),
-    )
-    conn.commit()
-    conn.close()
-
-def ensure_device(device_id:str):
-    conn = get_db()
-    conn.execute(
-        "INSERT OR IGNORE INTO devices(device_id, created_ts) VALUES(?, ?)",
-        (device_id, now_utc().isoformat())
-    )
-    conn.commit()
-    conn.close()
-
-def get_current_sub(device_id:str):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM subscriptions
-        WHERE device_id = ?
-        ORDER BY id DESC
-        LIMIT 1
-    """, (device_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-# -----------------------------
-# Routes - public API
-# -----------------------------
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "app": APP_NAME, "time": now_utc().isoformat()})
-
-@app.get("/api/v1/subscriptions/status")
-def sub_status():
-    device_id = request.args.get("device_id", "").strip()
-    if not device_id:
-        return jsonify({"ok": False, "error": "device_id required"}), 400
-
-    ensure_device(device_id)
-    row = get_current_sub(device_id)
-    active = False
-    is_dev = False
-    expires_at = None
-
-    if row:
-        is_dev  = bool(row["is_dev"])
-        if row["end_ts"]:
-            expires_at = row["end_ts"]
-            # active if now < end
+def cleanup_expired(data):
+    now = datetime.utcnow()
+    to_del = []
+    for dev, info in data.items():
+        exp = info.get("expires_at")
+        if exp:
             try:
-                active = now_utc() < datetime.fromisoformat(expires_at)
+                exp_dt = datetime.fromisoformat(exp)
+                if exp_dt < now:
+                    info["active"] = False
+                    info["expires_at"] = None
             except Exception:
-                active = False
-        # dev mode is always considered active, expires_at may be null
-        if is_dev:
-            active = True
+                continue
+    return data
 
-    payload = {
-        "ok": True,
-        "sub_active": bool(active),
-        "dev": bool(is_dev),
-        "expires_at": expires_at,
-        "now": now_utc().isoformat()
-    }
-    return jsonify(payload)
+# ============ API ============
 
-@app.post("/api/v1/subscriptions/submit")
-def submit_payment():
-    data = request.get_json(silent=True) or {}
-    device_id = str(data.get("device_id", "")).strip()
-    tx       = str(data.get("tx", "")).strip()
-    comment  = str(data.get("comment", "")).strip()
-    amount   = data.get("amount")
-    currency = data.get("currency")
+@app.route("/api/subscriptions/status")
+def api_status():
+    device_id = request.args.get("device_id")
+    if not device_id:
+        return jsonify({"error": "no device_id"}), 400
+    data = load_data()
+    data = cleanup_expired(data)
+    user = data.get(device_id, {"free_left": FREE_TRIES, "active": False, "expires_at": None})
 
-    if not device_id or not tx:
-        return jsonify({"ok": False, "error": "device_id and tx are required"}), 400
+    # если у юзера нет записи — создаем
+    if device_id not in data:
+        data[device_id] = user
+        save_data(data)
 
-    ensure_device(device_id)
-    conn = get_db()
-    conn.execute("""
-        INSERT INTO payments(device_id, tx, comment, status, amount, currency, created_ts)
-        VALUES (?, ?, ?, 'pending', ?, ?, ?)
-    """, (device_id, tx, comment, amount, currency, now_utc().isoformat()))
-    conn.commit()
-    conn.close()
-    log_audit("payment_submit", f"device={device_id} tx={tx[:16]}... comment={comment}")
-    return jsonify({"ok": True, "queued": True})
+    return jsonify({
+        "device_id": device_id,
+        "active": user.get("active", False),
+        "expires_at": user.get("expires_at"),
+        "free_left": user.get("free_left", 0)
+    })
 
-# -----------------------------
-# Admin API (protected by ADMIN_KEY)
-# -----------------------------
-def require_admin():
-    key = request.headers.get("X-Admin-Key") or request.args.get("admin_key")
-    return key and key == ADMIN_KEY
+@app.route("/api/subscriptions/consume", methods=["POST"])
+def api_consume():
+    payload = request.get_json(force=True)
+    device_id = payload.get("device_id")
+    if not device_id:
+        return jsonify({"error": "no device_id"}), 400
+    data = load_data()
+    user = data.get(device_id)
+    if not user:
+        user = {"free_left": FREE_TRIES, "active": False, "expires_at": None}
 
-@app.get("/api/v1/admin/pending")
-def admin_pending():
-    if not require_admin():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM payments WHERE status = 'pending' ORDER BY id DESC")
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return jsonify({"ok": True, "items": rows})
+    if user.get("active"):
+        return jsonify({"status": "subscribed"}), 200
 
-@app.post("/api/v1/admin/activate")
-def admin_activate():
-    if not require_admin():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    data = request.get_json(silent=True) or {}
-    device_id = str(data.get("device_id", "")).strip()
-    months    = int(data.get("months", 1))
-    dev       = bool(data.get("dev", False))
-    payment_id = data.get("payment_id")
+    if user["free_left"] <= 0:
+        return jsonify({"error": "no tries left"}), 403
+
+    user["free_left"] -= 1
+    data[device_id] = user
+    save_data(data)
+    return jsonify({"status": "ok", "free_left": user["free_left"]})
+
+@app.route("/api/verify_payment", methods=["POST"])
+def api_verify_payment():
+    payload = request.get_json(force=True)
+    device_id = payload.get("device_id")
+    tx = (payload.get("tx") or "").strip()
+    comment = (payload.get("comment") or "").strip()
 
     if not device_id:
-        return jsonify({"ok": False, "error": "device_id required"}), 400
+        return jsonify({"error": "no device_id"}), 400
 
-    ensure_device(device_id)
+    data = load_data()
+    user = data.get(device_id, {"free_left": FREE_TRIES, "active": False, "expires_at": None})
 
-    start = now_utc()
-    end   = None if dev else (start + timedelta(days=30*max(1, months)))
+    # Режим разработчика через код в комментарии
+    if comment.strip().upper() == DEV_CODE:
+        user["active"] = True
+        user["expires_at"] = (datetime.utcnow() + timedelta(days=3650)).isoformat()
+        data[device_id] = user
+        save_data(data)
+        return jsonify({"status": "activated_dev"})
 
-    conn = get_db()
-    conn.execute("""
-        INSERT INTO subscriptions(device_id, is_active, is_dev, start_ts, end_ts, created_ts, updated_ts)
-        VALUES(?, ?, ?, ?, ?, ?, ?)
-    """, (device_id, 1, 1 if dev else 0,
-          start.isoformat(), None if dev else end.isoformat(),
-          start.isoformat(), start.isoformat()))
-    if payment_id:
-        conn.execute("UPDATE payments SET status = 'approved' WHERE id = ?", (payment_id,))
-    conn.commit()
-    conn.close()
-    log_audit("admin_activate", f"device={device_id} dev={dev} months={months}")
-    return jsonify({"ok": True, "activated": True, "dev": dev, "expires_at": None if dev else end.isoformat()})
+    # Сохраняем заявку для ручного подтверждения
+    user["pending_tx"] = tx
+    data[device_id] = user
+    save_data(data)
+    return jsonify({"status": "pending"})
 
-@app.post("/api/v1/admin/reject")
-def admin_reject():
-    if not require_admin():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    data = request.get_json(silent=True) or {}
-    payment_id = data.get("payment_id")
-    if not payment_id:
-        return jsonify({"ok": False, "error": "payment_id required"}), 400
-    conn = get_db()
-    conn.execute("UPDATE payments SET status = 'rejected' WHERE id = ?", (payment_id,))
-    conn.commit()
-    conn.close()
-    log_audit("admin_reject", f"payment_id={payment_id}")
-    return jsonify({"ok": True})
+# ============ ADMIN PANEL ============
 
-@app.post("/api/v1/admin/revoke")
-def admin_revoke():
-    if not require_admin():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    data = request.get_json(silent=True) or {}
-    device_id = str(data.get("device_id", "")).strip()
-    if not device_id:
-        return jsonify({"ok": False, "error": "device_id required"}), 400
-
-    conn = get_db()
-    conn.execute("""
-        INSERT INTO subscriptions(device_id, is_active, is_dev, start_ts, end_ts, created_ts, updated_ts)
-        VALUES(?, 0, 0, ?, ?, ?, ?)
-    """, (device_id, now_utc().isoformat(), now_utc().isoformat(), now_utc().isoformat(), now_utc().isoformat()))
-    conn.commit()
-    conn.close()
-    log_audit("admin_revoke", f"device={device_id}")
-    return jsonify({"ok": True, "revoked": True})
-
-# -----------------------------
-# Admin UI
-# -----------------------------
-@app.get("/admin")
+@app.route("/admin", methods=["GET", "POST"])
 def admin_page():
-    return render_template("admin.html", app_name=APP_NAME)
+    data = load_data()
+    data = cleanup_expired(data)
+    save_data(data)
 
-@app.get("/")
-def index():
-    return render_template("admin.html", app_name=APP_NAME)
+    if request.method == "POST":
+        password = request.form.get("password")
+        if password != ADMIN_PASSWORD:
+            return "❌ Неверный пароль администратора", 403
 
-# -----------------------------
-# Main
-# -----------------------------
+        action = request.form.get("action")
+        device_id = request.form.get("device_id")
+
+        if not device_id:
+            return "Нет device_id", 400
+
+        if action == "activate":
+            days = int(request.form.get("days") or SUBSCRIPTION_DAYS)
+            exp = (datetime.utcnow() + timedelta(days=days)).isoformat()
+            data[device_id] = {
+                "active": True,
+                "expires_at": exp,
+                "free_left": 0,
+            }
+            save_data(data)
+            msg = f"✅ Активирована подписка на {days} дней"
+        elif action == "reset_free":
+            user = data.get(device_id, {"free_left": FREE_TRIES})
+            user["free_left"] = FREE_TRIES
+            data[device_id] = user
+            save_data(data)
+            msg = "🔁 Бесплатные попытки сброшены"
+        elif action == "delete":
+            if device_id in data:
+                del data[device_id]
+                save_data(data)
+            msg = "🗑️ Удалено"
+        else:
+            msg = "Неизвестное действие"
+
+        return f"<h3>{msg}</h3><a href='/admin'>← Назад</a>"
+
+    # GET
+    return render_template("admin.html", devices=sorted(load_data().items()))
+
+@app.route("/")
+def root():
+    return jsonify({"status": "ok", "message": "CamFinder Server active"})
+
+# ============ START ============
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=PORT)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
