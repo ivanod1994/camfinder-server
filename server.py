@@ -14,16 +14,16 @@ app = Flask(__name__, template_folder="templates")
 app.secret_key = SECRET_KEY
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-
+# ===== БАЗА ДАННЫХ =====
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     conn = db()
     c = conn.cursor()
+    # Устройства
     c.execute("""
         CREATE TABLE IF NOT EXISTS devices (
             device_id TEXT PRIMARY KEY,
@@ -35,26 +35,26 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
+    # Платежи
     c.execute("""
         CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             device_id TEXT,
             tx TEXT,
             comment TEXT,
+            status TEXT DEFAULT 'pending',
             created_at TEXT NOT NULL
         )
     """)
     conn.commit()
     conn.close()
 
-
 init_db()
 
-
+# ===== УТИЛИТЫ =====
 def get_device(conn, device_id: str):
     cur = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,))
     return cur.fetchone()
-
 
 def ensure_device(conn, device_id: str, default_free: int = 3):
     row = get_device(conn, device_id)
@@ -68,7 +68,6 @@ def ensure_device(conn, device_id: str, default_free: int = 3):
         row = get_device(conn, device_id)
     return row
 
-
 def device_to_json(row):
     return {
         "device_id": row["device_id"],
@@ -78,16 +77,17 @@ def device_to_json(row):
         "dev_mode": bool(row["dev_mode"]),
     }
 
-
-# ---------- Admin auth/helpers ----------
+# ===== ADMIN AUTH =====
 def is_admin():
     return session.get("admin_auth") is True
 
-
 @app.route("/admin")
 def admin_page():
-    return render_template("admin.html", app_name=APP_NAME)
-
+    conn = db()
+    devices = conn.execute("SELECT * FROM devices ORDER BY updated_at DESC LIMIT 200").fetchall()
+    payments = conn.execute("SELECT * FROM payments ORDER BY created_at DESC LIMIT 200").fetchall()
+    conn.close()
+    return render_template("admin.html", app_name=APP_NAME, devices=devices, payments=payments)
 
 @app.route("/api/admin/auth", methods=["POST"])
 def admin_auth():
@@ -98,18 +98,6 @@ def admin_auth():
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "bad_password"}), 401
 
-
-@app.route("/api/admin/devices", methods=["GET"])
-def admin_devices():
-    if not is_admin():
-        return jsonify({"error": "unauthorized"}), 401
-    conn = db()
-    cur = conn.execute("SELECT * FROM devices ORDER BY updated_at DESC LIMIT 500")
-    items = [device_to_json(r) | {"updated_at": r["updated_at"]} for r in cur.fetchall()]
-    conn.close()
-    return jsonify(items)
-
-
 @app.route("/api/admin/activate", methods=["POST"])
 def admin_activate():
     if not is_admin():
@@ -119,83 +107,19 @@ def admin_activate():
     days = int(data.get("days", 30))
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
+
     conn = db()
     ensure_device(conn, device_id)
     expires = (datetime.utcnow() + timedelta(days=days)).isoformat()
     now = datetime.utcnow().isoformat()
-    conn.execute("""
-        UPDATE devices SET sub_active=1, sub_expires_at=?, updated_at=? WHERE device_id=?
-    """, (expires, now, device_id))
+    conn.execute("UPDATE devices SET sub_active=1, sub_expires_at=?, updated_at=? WHERE device_id=?",
+                 (expires, now, device_id))
+    conn.execute("UPDATE payments SET status='approved' WHERE device_id=?", (device_id,))
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "expires_at": expires})
 
-
-@app.route("/api/admin/deactivate", methods=["POST"])
-def admin_deactivate():
-    if not is_admin():
-        return jsonify({"error": "unauthorized"}), 401
-    data = request.get_json(force=True, silent=True) or {}
-    device_id = data.get("device_id")
-    if not device_id:
-        return jsonify({"error": "device_id required"}), 400
-    conn = db()
-    now = datetime.utcnow().isoformat()
-    conn.execute("""
-        UPDATE devices SET sub_active=0, sub_expires_at=NULL, updated_at=? WHERE device_id=?
-    """, (now, device_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/set_free", methods=["POST"])
-def admin_set_free():
-    if not is_admin():
-        return jsonify({"error": "unauthorized"}), 401
-    data = request.get_json(force=True, silent=True) or {}
-    device_id = data.get("device_id")
-    free_left = int(data.get("free_left", 0))
-    if not device_id:
-        return jsonify({"error": "device_id required"}), 400
-    conn = db()
-    ensure_device(conn, device_id)
-    now = datetime.utcnow().isoformat()
-    conn.execute("""
-        UPDATE devices SET free_left=?, updated_at=? WHERE device_id=?
-    """, (free_left, now, device_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True, "free_left": free_left})
-
-
-@app.route("/api/admin/set_dev", methods=["POST"])
-def admin_set_dev():
-    if not is_admin():
-        return jsonify({"error": "unauthorized"}), 401
-    data = request.get_json(force=True, silent=True) or {}
-    device_id = data.get("device_id")
-    dev_mode = bool(data.get("dev_mode", False))
-    if not device_id:
-        return jsonify({"error": "device_id required"}), 400
-    conn = db()
-    ensure_device(conn, device_id)
-    now = datetime.utcnow().isoformat()
-    if dev_mode:
-        expires = datetime(2099, 1, 1).isoformat()
-        conn.execute("""
-            UPDATE devices SET dev_mode=1, sub_active=1, sub_expires_at=?, updated_at=? WHERE device_id=?
-        """, (expires, now, device_id))
-    else:
-        conn.execute("""
-            UPDATE devices SET dev_mode=0, updated_at=? WHERE device_id=?
-        """, (now, device_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"ok": True, "dev_mode": dev_mode})
-
-
-# ---------- Public API ----------
+# ===== PUBLIC API =====
 @app.route("/api/register_device", methods=["POST"])
 def register_device():
     data = request.get_json(force=True, silent=True) or {}
@@ -204,10 +128,9 @@ def register_device():
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
     conn = db()
-    row = ensure_device(conn, device_id, default_free=default_free)
+    row = ensure_device(conn, device_id, default_free)
     conn.close()
     return jsonify(device_to_json(row))
-
 
 @app.route("/api/device_status", methods=["GET"])
 def device_status():
@@ -215,10 +138,9 @@ def device_status():
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
     conn = db()
-    row = ensure_device(conn, device_id, default_free=3)
+    row = ensure_device(conn, device_id)
     conn.close()
     return jsonify(device_to_json(row))
-
 
 @app.route("/api/update_free_count", methods=["POST"])
 def update_free_count():
@@ -227,7 +149,7 @@ def update_free_count():
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
     conn = db()
-    row = ensure_device(conn, device_id, default_free=3)
+    row = ensure_device(conn, device_id)
     free_left = int(row["free_left"])
     if free_left > 0:
         free_left -= 1
@@ -237,14 +159,13 @@ def update_free_count():
     conn.close()
     return jsonify({"ok": True, "free_left": free_left})
 
-
 @app.route("/api/subscriptions/status", methods=["GET"])
 def sub_status():
     device_id = request.args.get("device_id")
     if not device_id:
         return jsonify({"error": "device_id required"}), 400
     conn = db()
-    row = ensure_device(conn, device_id, default_free=3)
+    row = ensure_device(conn, device_id)
     active = bool(row["sub_active"])
     expires_at = row["sub_expires_at"]
     if active and expires_at:
@@ -258,43 +179,37 @@ def sub_status():
     conn.close()
     return jsonify({"active": active, "expires_at": expires_at})
 
-
 @app.route("/api/verify_payment", methods=["POST"])
 def verify_payment():
     data = request.get_json(force=True, silent=True) or {}
     device_id = data.get("device_id")
     tx = (data.get("tx") or "").strip()
     comment = (data.get("comment") or "").strip()
+
     if not device_id or not (tx or comment):
         return jsonify({"error": "device_id and tx/comment required"}), 400
 
     conn = db()
     ensure_device(conn, device_id)
     now = datetime.utcnow().isoformat()
-    conn.execute("INSERT INTO payments(device_id, tx, comment, created_at) VALUES(?,?,?,?)",
+    conn.execute("INSERT INTO payments(device_id, tx, comment, created_at) VALUES (?,?,?,?)",
                  (device_id, tx, comment, now))
 
-    # DEV режим через сервер по комментарию MASTER112
-    if comment == "MASTER112":
+    if comment.strip().upper() == "MASTER112":
         expires = datetime(2099, 1, 1).isoformat()
-        conn.execute("""
-            UPDATE devices SET dev_mode=1, sub_active=1, sub_expires_at=?, updated_at=? WHERE device_id=?
-        """, (expires, now, device_id))
-
+        conn.execute("UPDATE devices SET dev_mode=1, sub_active=1, sub_expires_at=?, updated_at=? WHERE device_id=?",
+                     (expires, now, device_id))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
-
 
 @app.route("/health")
 def health():
     return jsonify({"ok": True, "time": datetime.utcnow().isoformat()})
 
-
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8080"))
