@@ -1,82 +1,171 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>Админ-панель CamFinder</title>
-<style>
-body {
-  background-color: #0d1117;
-  color: #c9d1d9;
-  font-family: "Segoe UI", sans-serif;
-  margin: 40px;
-}
-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin-top: 20px;
-}
-th, td {
-  border: 1px solid #30363d;
-  padding: 8px;
-}
-th {
-  background-color: #161b22;
-}
-tr:nth-child(even) { background-color: #161b22; }
-button {
-  background-color: #238636;
-  color: white;
-  border: none;
-  padding: 6px 10px;
-  margin: 2px;
-  cursor: pointer;
-  border-radius: 4px;
-}
-button.delete { background-color: #d73a49; }
-button.reset { background-color: #8957e5; }
-input, select {
-  background: #0d1117;
-  color: #c9d1d9;
-  border: 1px solid #30363d;
-  padding: 4px;
-  border-radius: 4px;
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — Admin</title>
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b1220;color:#e6ebff;margin:0;padding:0}
+    header{padding:16px 20px;background:#0f1730;border-bottom:1px solid #1f2b4d;display:flex;align-items:center;justify-content:space-between}
+    h1{font-size:18px;margin:0}
+    .container{max-width:1100px;margin:24px auto;padding:0 16px}
+    .card{background:#121a36;border:1px solid #1f2b4d;border-radius:12px;padding:16px;margin-bottom:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > *{flex:1}
+    input,select,button{background:#0f1630;color:#e6ebff;border:1px solid #2a3b6e;border-radius:10px;padding:10px 12px;font-size:14px;outline:none}
+    button{background:#2a6af0;border-color:#2a6af0;cursor:pointer}
+    button.secondary{background:#1d284d;border-color:#334a8a}
+    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+    th,td{padding:10px;border-bottom:1px solid #1f2b4d;text-align:left;vertical-align:top}
+    th{color:#a9b8ff;font-weight:600}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+    .ok{background:#183a2a;color:#85ffc2;border:1px solid #2a6a50}
+    .bad{background:#3a1824;color:#ffb1c1;border:1px solid #6a2a3b}
+    .muted{color:#9fb1ff}
+    .grid{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+  </style>
 </head>
 <body>
-<h2>👑 Панель администратора CamFinder</h2>
-<form method="POST">
-  <label>Пароль администратора:</label>
-  <input type="password" name="password" required>
-  <br><br>
-  <label>Device ID:</label>
-  <input type="text" name="device_id" required>
-  <br><br>
-  <label>Действие:</label>
-  <select name="action">
-    <option value="activate">Активировать подписку</option>
-    <option value="reset_free">Сбросить бесплатные попытки</option>
-    <option value="delete">Удалить запись</option>
-  </select>
-  <label>Дней:</label>
-  <input type="number" name="days" value="30" style="width:60px">
-  <br><br>
-  <button type="submit">Выполнить</button>
-</form>
+<header>
+  <h1>Админ-панель — {{ app_name }}</h1>
+  <div id="auth_status" class="muted">Не авторизован</div>
+</header>
+<div class="container">
+  <div class="card">
+    <div class="row">
+      <input id="admin_pass" type="password" placeholder="Пароль администратора">
+      <button onclick="auth()">Войти</button>
+    </div>
+    <div class="muted" style="margin-top:6px">Пароль по умолчанию: <code>Ledevi3656610208</code> (env <code>ADMIN_PASS</code>)</div>
+  </div>
 
-<h3>Список устройств</h3>
-<table>
-<tr><th>Device ID</th><th>Active</th><th>Expires</th><th>Free left</th><th>Pending TX</th></tr>
-{% for device_id, info in devices %}
-<tr>
-  <td>{{ device_id }}</td>
-  <td>{{ info.active }}</td>
-  <td>{{ info.expires_at }}</td>
-  <td>{{ info.free_left }}</td>
-  <td>{{ info.pending_tx if info.pending_tx else '' }}</td>
-</tr>
-{% endfor %}
-</table>
+  <div class="card">
+    <div class="row">
+      <input id="device_id" placeholder="device_id (android-...)" />
+      <input id="days" type="number" value="30" min="1" style="max-width:140px" />
+      <button onclick="activate()">Активировать подписку</button>
+      <button class="secondary" onclick="deactivate()">Деактивировать</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <input id="free_left" type="number" min="0" value="3" style="max-width:140px" />
+      <button onclick="set_free()">Установить free_left</button>
+      <select id="dev_mode_sel" style="max-width:180px">
+        <option value="true">dev_mode: ON</option>
+        <option value="false">dev_mode: OFF</option>
+      </select>
+      <button onclick="set_dev()">Применить dev_mode</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <h3 style="margin:0">Устройства</h3>
+      <button class="secondary" onclick="load_devices()">Обновить</button>
+    </div>
+    <table id="dev_table">
+      <thead>
+        <tr>
+          <th>device_id</th>
+          <th>free_left</th>
+          <th>подписка</th>
+          <th>до</th>
+          <th>dev</th>
+          <th>updated</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let authed = false;
+
+async function auth(){
+  const pass = document.getElementById('admin_pass').value;
+  const r = await fetch('/api/admin/auth', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({password: pass})
+  });
+  const j = await r.json();
+  if(j.ok){
+    authed = true;
+    document.getElementById('auth_status').innerText = 'Авторизован';
+    load_devices();
+  }else{
+    authed = false;
+    document.getElementById('auth_status').innerText = 'Ошибка пароля';
+    alert('Неверный пароль');
+  }
+}
+
+async function load_devices(){
+  if(!authed){ return; }
+  const r = await fetch('/api/admin/devices');
+  if(!r.ok){ alert('Не авторизован'); return; }
+  const data = await r.json();
+  const tb = document.querySelector('#dev_table tbody');
+  tb.innerHTML = '';
+  for(const d of data){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code>${d.device_id}</code></td>
+      <td>${d.free_left}</td>
+      <td>${d.sub_active ? '<span class="pill ok">ON</span>' : '<span class="pill bad">OFF</span>'}</td>
+      <td>${d.sub_expires_at || ''}</td>
+      <td>${d.dev_mode ? 'ON' : '—'}</td>
+      <td class="muted">${d.updated_at || ''}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function val(id){ return document.getElementById(id).value; }
+
+async function activate(){
+  const r = await fetch('/api/admin/activate', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: val('device_id'), days: parseInt(val('days')||'30',10)})
+  });
+  const j = await r.json();
+  if(!r.ok){ alert(JSON.stringify(j)); return; }
+  load_devices();
+}
+
+async function deactivate(){
+  const r = await fetch('/api/admin/deactivate', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: val('device_id')})
+  });
+  const j = await r.json();
+  if(!r.ok){ alert(JSON.stringify(j)); return; }
+  load_devices();
+}
+
+async function set_free(){
+  const r = await fetch('/api/admin/set_free', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: val('device_id'), free_left: parseInt(val('free_left')||'0',10)})
+  });
+  const j = await r.json();
+  if(!r.ok){ alert(JSON.stringify(j)); return; }
+  load_devices();
+}
+
+async function set_dev(){
+  const r = await fetch('/api/admin/set_dev', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: val('device_id'), dev_mode: document.getElementById('dev_mode_sel').value === 'true'})
+  });
+  const j = await r.json();
+  if(!r.ok){ alert(JSON.stringify(j)); return; }
+  load_devices();
+}
+</script>
 </body>
 </html>
-
