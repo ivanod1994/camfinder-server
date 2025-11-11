@@ -2,137 +2,56 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>{{ app_name }}</title>
+<title>CamFinder Admin Panel</title>
 <style>
-body{background:#0d1117;color:#fff;font-family:Arial,Helvetica,sans-serif;margin:20px;}
-h2{color:#58a6ff;margin:0 0 10px;}
-h3{margin-top:28px;}
-table{width:100%;border-collapse:collapse;margin-top:10px;}
-th,td{border:1px solid #333;padding:8px;text-align:left;vertical-align:top;}
-th{background:#161b22;}
-tr:nth-child(even){background:#1f242c;}
-.btn{background:#238636;border:none;padding:6px 10px;border-radius:4px;color:#fff;cursor:pointer}
-.btn:hover{background:#2ea043}
-.btn-red{background:#d43c3c}
-.btn-red:hover{background:#f04747}
-.btn-blue{background:#1f6feb}
-.btn-blue:hover{background:#2b74ff}
-.red{color:#ff5555;font-weight:bold}
-.card{background:#0f141b;border:1px solid #202938;border-radius:8px;padding:12px;margin-top:10px}
-.row{display:flex;gap:10px;flex-wrap:wrap}
-.row .card{flex:1 1 320px}
-.small{opacity:.8;font-size:.9em}
-.right{float:right}
+body { font-family: Arial, sans-serif; background: #111; color: #eee; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+th { background: #222; }
+tr:nth-child(even) { background: #1a1a1a; }
+button { background: #0066ff; border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+button:hover { background: #0099ff; }
+.red { background: #ff3b30; }
+.orange { background: #ff9500; }
+.green { background: #34c759; }
+.gray { background: #777; }
 </style>
-</head>
-<body>
-
-<h2>CamFinder Admin Panel</h2>
-
-<div class="row">
-  <div class="card">
-    <b>Вход в админку</b>
-    <div class="small">Пароль хранится в переменной <code>ADMIN_PASS</code> на сервере.</div>
-    <div style="margin-top:8px">
-      <input id="pwd" type="password" placeholder="Пароль админа" style="width:220px;padding:6px">
-      <button class="btn" onclick="login()">Войти</button>
-      <button class="btn btn-red" onclick="logout()">Выйти</button>
-    </div>
-  </div>
-  <div class="card">
-    <b>Быстрые действия</b>
-    <div style="margin-top:6px">
-      <input id="act_device" placeholder="device_id" style="width:260px;padding:6px">
-      <button class="btn btn-blue" onclick="activate30()">Активировать 30 дней</button>
-      <button class="btn" onclick="devOn()">Dev ON</button>
-      <button class="btn btn-red" onclick="devOff()">Dev OFF</button>
-      <button class="btn btn-red" onclick="free0()">free_left = 0</button>
-      <button class="btn" onclick="free3()">free_left = 3</button>
-    </div>
-  </div>
-</div>
-
-<h3>📱 Устройства</h3>
-<table>
-  <tr>
-    <th>ID</th><th>Активна</th><th>Истекает</th><th>Free Left</th><th>Dev</th><th>Создано</th><th>Обновлено</th><th>Last seen</th>
-  </tr>
-  {% for d in devices %}
-  <tr>
-    <td>{{ d['device_id'] }}</td>
-    <td>{{ '✅' if d['sub_active'] else '❌' }}</td>
-    <td>{{ d['sub_expires_at'] or '-' }}</td>
-    <td>{{ d['free_left'] }}</td>
-    <td>{{ '🧩' if d['dev_mode'] else '-' }}</td>
-    <td class="small">{{ d['created_at'] }}</td>
-    <td class="small">{{ d['updated_at'] }}</td>
-    <td class="small">{{ d['last_seen'] or '-' }}</td>
-  </tr>
-  {% endfor %}
-</table>
-
-<h3>💳 Заявки (TX / комментарий)</h3>
-<table>
-  <tr>
-    <th>Время</th><th>Устройство</th><th class="red">TX</th><th class="red">Комментарий</th><th>Статус</th><th>Действие</th>
-  </tr>
-  {% for p in payments %}
-  <tr>
-    <td>{{ p['created_at'] }}</td>
-    <td>{{ p['device_id'] }}</td>
-    <td class="red">{{ p['tx'] or '-' }}</td>
-    <td class="red">{{ p['comment'] or '-' }}</td>
-    <td>{{ p['status'] }}</td>
-    <td><button class="btn btn-blue" onclick="activatePay('{{ p['device_id'] }}')">Активировать 30 дней</button></td>
-  </tr>
-  {% endfor %}
-</table>
-
 <script>
-async function post(url, body){
-  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
-  return r;
-}
-async function login(){
-  const password = document.getElementById('pwd').value;
-  const r = await post('/api/admin/auth',{password});
-  alert(r.ok?'OK':'Ошибка пароля');
-}
-async function logout(){
-  await post('/api/admin/logout',{});
-  alert('Выход выполнен');
-}
-function getDid(){ return document.getElementById('act_device').value.trim(); }
-async function activate30(){
-  const device_id = getDid(); if(!device_id) return alert('Укажи device_id');
-  const r = await post('/api/admin/activate',{device_id,days:30});
-  alert(r.ok?'Активировано':'Ошибка');
-}
-async function activatePay(device_id){
-  const r = await post('/api/admin/activate',{device_id,days:30});
-  alert(r.ok?'Активировано':'Ошибка');
-}
-async function devOn(){
-  const device_id = getDid(); if(!device_id) return alert('Укажи device_id');
-  const r = await post('/api/admin/dev_mode',{device_id,enable:true});
-  alert(r.ok?'Dev ON':'Ошибка');
-}
-async function devOff(){
-  const device_id = getDid(); if(!device_id) return alert('Укажи device_id');
-  const r = await post('/api/admin/dev_mode',{device_id,enable:false});
-  alert(r.ok?'Dev OFF':'Ошибка');
-}
-async function free0(){
-  const device_id = getDid(); if(!device_id) return alert('Укажи device_id');
-  const r = await post('/api/admin/set_free_left',{device_id,value:0});
-  alert(r.ok?'free_left=0':'Ошибка');
-}
-async function free3(){
-  const device_id = getDid(); if(!device_id) return alert('Укажи device_id');
-  const r = await post('/api/admin/set_free_left',{device_id,value:3});
-  alert(r.ok?'free_left=3':'Ошибка');
+async function action(device_id, act, pwd) {
+  const resp = await fetch(`/admin/action?pwd=${pwd}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: device_id, action: act })
+  });
+  const data = await resp.json();
+  alert(data.msg || data.error || 'OK');
+  location.reload();
 }
 </script>
-
+</head>
+<body>
+<h2>CamFinder Admin Panel</h2>
+<table>
+<tr>
+<th>ID</th><th>Подписка</th><th>Истекает</th><th>Бесплатно</th><th>Последняя активность</th><th>Действия</th>
+</tr>
+{% for d in devices %}
+<tr>
+<td>{{ d.device_id }}</td>
+<td>{{ '✅ Активна' if d.active else '❌ Нет' }}</td>
+<td>{{ d.expires_at or '-' }}</td>
+<td>{{ d.free_left }}</td>
+<td>{{ d.last_seen or '-' }}</td>
+<td>
+<button class="green" onclick="action('{{d.device_id}}','activate_30d','{{pwd}}')">+30д</button>
+<button class="red" onclick="action('{{d.device_id}}','remove_sub','{{pwd}}')">Удалить</button>
+<button class="orange" onclick="action('{{d.device_id}}','reset_free','{{pwd}}')">0</button>
+<button class="gray" onclick="action('{{d.device_id}}','give_free3','{{pwd}}')">3</button>
+<button class="green" onclick="action('{{d.device_id}}','dev_mode','{{pwd}}')">Dev</button>
+<button class="red" onclick="action('{{d.device_id}}','delete_device','{{pwd}}')">🗑</button>
+</td>
+</tr>
+{% endfor %}
+</table>
 </body>
 </html>
