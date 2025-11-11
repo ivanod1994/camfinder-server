@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ app_name }} — Status</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0b0f17; --card:#101826; --text:#e8f0ff; --muted:#98abc5;
+      --ok:#18c964; --line:rgba(255,255,255,.08);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; display:grid; place-items:center;
+      background:radial-gradient(1200px 800px at 20% -10%, #12203a 0%, #0b0f17 60%) fixed;
+      color:var(--text); font:16px/1.5 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
+    }
+    .card{
+      width:min(720px,92vw);
+      background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));
+      border:1px solid var(--line); border-radius:16px; padding:26px;
+      box-shadow:0 30px 80px rgba(0,0,0,.35);
+      text-align:center;
+    }
+    h1{margin:0 0 8px; font-size:26px; letter-spacing:.3px}
+    p{margin:8px 0 0; color:var(--muted)}
+    .ok{
+      display:inline-block; margin-top:14px; padding:8px 12px;
+      border-radius:999px; border:1px solid rgba(24,201,100,.35);
+      color:#9ff3c6; background:rgba(24,201,100,.12); font-weight:600;
+    }
+    .actions{margin-top:18px}
+    a{
+      color:#cfe1ff; text-decoration:none; border-bottom:1px dashed rgba(207,225,255,.35);
+    }
+    a:hover{opacity:.85}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>{{ app_name }}</h1>
+    <div class="ok">Server is running successfully ✅</div>
+    <p>REST API доступен по маршрутам <code>/api/*</code>.</p>
+    <div class="actions">
+      <p><a href="/admin">Открыть админ-панель</a></p>
+    </div>
+  </div>
+</body>
+</html>
