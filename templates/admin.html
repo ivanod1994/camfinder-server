@@ -1,57 +1,184 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>CamFinder Admin Panel</title>
-<style>
-body { font-family: Arial, sans-serif; background: #111; color: #eee; }
-table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-th, td { border: 1px solid #333; padding: 8px; text-align: center; }
-th { background: #222; }
-tr:nth-child(even) { background: #1a1a1a; }
-button { background: #0066ff; border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
-button:hover { background: #0099ff; }
-.red { background: #ff3b30; }
-.orange { background: #ff9500; }
-.green { background: #34c759; }
-.gray { background: #777; }
-</style>
-<script>
-async function action(device_id, act, pwd) {
-  const resp = await fetch(`/admin/action?pwd=${pwd}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ device_id: device_id, action: act })
-  });
-  const data = await resp.json();
-  alert(data.msg || data.error || 'OK');
-  location.reload();
-}
-</script>
+  <meta charset="utf-8" />
+  <title>{{ app_name }} — Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg:#0b0f17;
+      --card:#121a27;
+      --muted:#9fb3ce;
+      --text:#e8f0ff;
+      --green:#18c964;
+      --red:#ff4d4f;
+      --amber:#f5a524;
+      --blue:#2f80ed;
+      --vio:#8a63d2;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font:16px/1.5 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
+      background:linear-gradient(180deg,#0b0f17 0%,#0e1522 100%) fixed;
+      color:var(--text);
+    }
+    header{
+      padding:24px 16px; text-align:center;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background:rgba(0,0,0,.2); backdrop-filter:blur(6px);
+      position:sticky; top:0; z-index:3;
+    }
+    h1{margin:0;font-size:22px;letter-spacing:.3px}
+    main{max-width:1100px;margin:24px auto;padding:0 12px}
+    .card{
+      background:var(--card); border:1px solid rgba(255,255,255,.06);
+      border-radius:14px; padding:16px; margin-bottom:16px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .row>*{flex:1}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:10px;border-bottom:1px dashed rgba(255,255,255,.08);vertical-align:top}
+    th{color:#bcd1ef;font-weight:600;text-align:left}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+    .ok{background:rgba(24,201,100,.18);color:#7bf3b2;border:1px solid rgba(24,201,100,.35)}
+    .warn{background:rgba(245,165,36,.15);color:#ffc772;border:1px solid rgba(245,165,36,.35)}
+    .err{background:rgba(255,77,79,.15);color:#ffadad;border:1px solid rgba(255,77,79,.35)}
+    .dev{background:rgba(138,99,210,.18);color:#c9b5ff;border:1px solid rgba(138,99,210,.35)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    button{
+      background:#1a2333;color:#cfe1ff;border:1px solid rgba(255,255,255,.08);
+      padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s;
+    }
+    button:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.15)}
+    .danger{background:rgba(255,77,79,.08);color:#ffb4b5;border-color:rgba(255,77,79,.25)}
+    .primary{background:rgba(47,128,237,.1);color:#bcd8ff;border-color:rgba(47,128,237,.35)}
+    .success{background:rgba(24,201,100,.1);color:#9ef3c4;border-color:rgba(24,201,100,.35)}
+    .vio{background:rgba(138,99,210,.1);color:#d9caff;border-color:rgba(138,99,210,.35)}
+    input[type="password"], input[type="text"]{
+      width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:#0e1522;color:#eaf2ff;outline:none;
+    }
+    .login{max-width:420px;margin:40px auto}
+    .tx{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:13px;color:#e0f4ff}
+    .small{font-size:12px}
+  </style>
 </head>
 <body>
-<h2>CamFinder Admin Panel</h2>
-<table>
-<tr>
-<th>ID</th><th>Подписка</th><th>Истекает</th><th>Бесплатно</th><th>Последняя активность</th><th>Действия</th>
-</tr>
-{% for d in devices %}
-<tr>
-<td>{{ d.device_id }}</td>
-<td>{{ '✅ Активна' if d.active else '❌ Нет' }}</td>
-<td>{{ d.expires_at or '-' }}</td>
-<td>{{ d.free_left }}</td>
-<td>{{ d.last_seen or '-' }}</td>
-<td>
-<button class="green" onclick="action('{{d.device_id}}','activate_30d','{{pwd}}')">+30д</button>
-<button class="red" onclick="action('{{d.device_id}}','remove_sub','{{pwd}}')">Удалить</button>
-<button class="orange" onclick="action('{{d.device_id}}','reset_free','{{pwd}}')">0</button>
-<button class="gray" onclick="action('{{d.device_id}}','give_free3','{{pwd}}')">3</button>
-<button class="green" onclick="action('{{d.device_id}}','dev_mode','{{pwd}}')">Dev</button>
-<button class="red" onclick="action('{{d.device_id}}','delete_device','{{pwd}}')">🗑</button>
-</td>
-</tr>
-{% endfor %}
-</table>
+  <header>
+    <h1>{{ app_name }} — Admin</h1>
+  </header>
+  <main>
+
+    {% if not session.is_admin %}
+    <div class="card login">
+      <h3>Вход в админ-панель</h3>
+      <p class="muted small">Введите пароль администратора.</p>
+      {% if error %}<p class="err badge">{{ error }}</p>{% endif %}
+      <form method="post" action="/admin">
+        <p><input type="password" name="password" placeholder="Пароль администратора" autofocus></p>
+        <p><button class="primary">Войти</button></p>
+      </form>
+    </div>
+    {% else %}
+
+    <div class="card">
+      <div class="row">
+        <div><b>Всего устройств:</b> {{ devices|length }}</div>
+        <div class="muted small">* dev-режим = бессрочная подписка</div>
+        <div style="text-align:right"><a class="muted small" href="/admin/logout">Выйти</a></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Устройство</th>
+            <th>Состояние</th>
+            <th>Оплата (последняя)</th>
+            <th>Попытки</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in devices %}
+          {% set active = d.sub_active or d.dev_mode %}
+          <tr>
+            <td>
+              <div><b>{{ d.device_id }}</b></div>
+              <div class="small muted">seen: {{ d.last_seen or "—" }}</div>
+              <div class="small muted">created: {{ d.created_at or "—" }}</div>
+            </td>
+            <td>
+              {% if d.dev_mode %}
+                <span class="badge dev">DEV (бессрочно)</span>
+              {% elif d.sub_active %}
+                <span class="badge ok">Подписка активна</span>
+                <div class="small muted">до: {{ d.sub_expires_at or "—" }}</div>
+              {% else %}
+                <span class="badge err">Нет подписки</span>
+              {% endif %}
+            </td>
+            <td class="tx">
+              {% if d.last_tx or d.last_comment %}
+                <div>TX: {{ d.last_tx or "—" }}</div>
+                <div>Комм: {{ d.last_comment or "—" }}</div>
+              {% else %}
+                <span class="muted small">Нет данных</span>
+              {% endif %}
+            </td>
+            <td>
+              <b>{{ d.free_left }}</b>
+            </td>
+            <td class="actions">
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="grant30">
+                <button class="success">Выдать 30 дней</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="remove_sub">
+                <button>Убрать подписку</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="toggle_dev">
+                <button class="vio">{% if d.dev_mode %}Откл. DEV{% else %}Вкл. DEV{% endif %}</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="reset_free">
+                <button class="primary">Free = 3</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="zero_free">
+                <button class="primary">Free = 0</button>
+              </form>
+
+              <form method="post" action="/admin/action" onsubmit="return confirm('Удалить устройство?');">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="delete">
+                <button class="danger">Удалить</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="clear_tx">
+                <button>Очистить TX</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% endif %}
+  </main>
 </body>
 </html>
