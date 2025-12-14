@@ -14,17 +14,35 @@ from flask_cors import CORS
 # ------------------------------------------------------------------------------
 APP_NAME = "CamFinder API Server"
 DB_FILE = os.environ.get("DEVICES_DB", "devices.json")
+CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Ledevi3656610208")
 SECRET_KEY = os.environ.get("SECRET_KEY", "camfinder-secret-" + uuid.uuid4().hex)
 
 # Cколько бесплатных поисков давать изначально
 INITIAL_FREE = 3
 
+# Конфигурация по умолчанию
+DEFAULT_CONFIG = {
+    "prices": {
+        "3d": {"usd": 3, "desc": "3 дня"},
+        "7d": {"usd": 6, "desc": "7 дней"},
+        "30d": {"usd": 10, "desc": "30 дней"},
+        "180d": {"usd": 30, "desc": "6 месяцев"},
+        "365d": {"usd": 50, "desc": "1 год"}
+    },
+    "wallets": {
+        "BTC": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+        "ETH": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+        "USDT": "THXrLBqa1QE1ZNFh2p48bWfQKYEDnTSYwT"
+    }
+}
+
 app = Flask(__name__, template_folder="templates", static_folder=None)
 app.config["SECRET_KEY"] = SECRET_KEY
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 _db_lock = threading.Lock()
+_config_lock = threading.Lock()
 
 # ------------------------------------------------------------------------------
 # Утилиты
@@ -61,6 +79,35 @@ def save_db(data: Dict[str, Any]) -> None:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp, DB_FILE)
+
+def load_config() -> Dict[str, Any]:
+    if not os.path.exists(CONFIG_FILE):
+        return DEFAULT_CONFIG.copy()
+    with _config_lock:
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Проверяем наличие обязательных полей
+            if "prices" not in data:
+                data["prices"] = DEFAULT_CONFIG["prices"].copy()
+            if "wallets" not in data:
+                data["wallets"] = DEFAULT_CONFIG["wallets"].copy()
+            return data
+        except Exception:
+            return DEFAULT_CONFIG.copy()
+
+def save_config(data: Dict[str, Any]) -> None:
+    # Валидируем конфиг перед сохранением
+    if "prices" not in data:
+        data["prices"] = DEFAULT_CONFIG["prices"].copy()
+    if "wallets" not in data:
+        data["wallets"] = DEFAULT_CONFIG["wallets"].copy()
+    
+    with _config_lock:
+        tmp = CONFIG_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, CONFIG_FILE)
 
 def ensure_device(d: Dict[str, Any], device_id: str) -> Dict[str, Any]:
     devices = d.setdefault("devices", {})
@@ -147,6 +194,57 @@ def admin_dashboard():
     devices.sort(key=sort_key)
     return render_template("admin.html", app_name=APP_NAME, devices=devices)
 
+@app.route("/admin/config", methods=["GET", "POST"])
+def admin_config():
+    require_admin()
+    config = load_config()
+    
+    if request.method == "POST":
+        try:
+            # Обработка тарифов
+            prices = {}
+            for key in request.form:
+                if key.startswith("price_key_"):
+                    idx = key.split('_')[-1]
+                    price_key = request.form.get(f"price_key_{idx}", "").strip()
+                    price_value = request.form.get(f"price_value_{idx}", "").strip()
+                    price_desc = request.form.get(f"price_desc_{idx}", "").strip()
+                    
+                    if price_key and price_value and price_desc:
+                        try:
+                            prices[price_key] = {
+                                "usd": float(price_value),
+                                "desc": price_desc
+                            }
+                        except ValueError:
+                            continue
+            
+            # Обработка кошельков
+            wallets = {}
+            for key in request.form:
+                if key.startswith("wallet_name_"):
+                    idx = key.split('_')[-1]
+                    wallet_name = request.form.get(f"wallet_name_{idx}", "").strip()
+                    wallet_addr = request.form.get(f"wallet_addr_{idx}", "").strip()
+                    
+                    if wallet_name and wallet_addr:
+                        wallets[wallet_name] = wallet_addr
+            
+            # Обновляем конфиг
+            config["prices"] = prices
+            config["wallets"] = wallets
+            save_config(config)
+            return redirect(url_for("admin_dashboard"))
+        except Exception as e:
+            return render_template(
+                "admin_config.html", 
+                app_name=APP_NAME, 
+                config=config,
+                error=f"Ошибка сохранения: {str(e)}"
+            )
+    
+    return render_template("admin_config.html", app_name=APP_NAME, config=config)
+
 @app.route("/admin/action", methods=["POST"])
 def admin_action():
     require_admin()
@@ -160,6 +258,14 @@ def admin_action():
         # Выдать подписку на 30 дней (перекрывает бесплатные попытки!)
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=30))
+    elif act == "grant7":
+        # Выдать подписку на 7 дней
+        dev["sub_active"] = True
+        dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=7))
+    elif act == "grant3":
+        # Выдать подписку на 3 дня
+        dev["sub_active"] = True
+        dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=3))
     elif act == "remove_sub":
         dev["sub_active"] = False
         dev["sub_expires_at"] = None
@@ -191,7 +297,7 @@ def admin_logout():
 
 # ------------------------------------------------------------------------------
 # API: регистрация, статус, попытки, платежи, подписки
-# Совместимость с клиентом: оставлены те же URL и поля
+# И конфигурации
 # ------------------------------------------------------------------------------
 @app.route("/api/register_device", methods=["POST"])
 def api_register_device():
@@ -295,6 +401,16 @@ def api_verify_payment():
 
     save_db(data)
     return jsonify({"ok": True, "message": "TX received", "device": snapshot(dev)})
+
+@app.route("/api/config", methods=["GET"])
+def api_get_config():
+    """Отдаёт конфигурацию: кошельки, цены, описание тарифов."""
+    config = load_config()
+    return jsonify({
+        "ok": True,
+        "prices": config.get("prices", {}),
+        "wallets": config.get("wallets", {}),
+    })
 
 # ------------------------------------------------------------------------------
 # Запуск
