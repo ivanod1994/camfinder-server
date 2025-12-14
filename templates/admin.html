@@ -46,6 +46,7 @@
     .warn{background:rgba(245,165,36,.15);color:#ffc772;border:1px solid rgba(245,165,36,.35)}
     .err{background:rgba(255,77,79,.15);color:#ffadad;border:1px solid rgba(255,77,79,.35)}
     .dev{background:rgba(138,99,210,.18);color:#c9b5ff;border:1px solid rgba(138,99,210,.35)}
+    .config{background:rgba(47,128,237,.15);color:#a8c7ff;border:1px solid rgba(47,128,237,.35)}
     .actions{display:flex;gap:8px;flex-wrap:wrap}
     button{
       background:#1a2333;color:#cfe1ff;border:1px solid rgba(255,255,255,.08);
@@ -56,13 +57,20 @@
     .primary{background:rgba(47,128,237,.1);color:#bcd8ff;border-color:rgba(47,128,237,.35)}
     .success{background:rgba(24,201,100,.1);color:#9ef3c4;border-color:rgba(24,201,100,.35)}
     .vio{background:rgba(138,99,210,.1);color:#d9caff;border-color:rgba(138,99,210,.35)}
-    input[type="password"], input[type="text"]{
+    .config-btn{background:rgba(47,128,237,.15);color:#a8c7ff;border-color:rgba(47,128,237,.35)}
+    input[type="password"], input[type="text"], textarea{
       width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
       background:#0e1522;color:#eaf2ff;outline:none;
     }
     .login{max-width:420px;margin:40px auto}
     .tx{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:13px;color:#e0f4ff}
     .small{font-size:12px}
+    .form-group{margin-bottom:16px}
+    label{display:block;margin-bottom:6px;color:var(--muted)}
+    .add-row{background:rgba(24,201,100,.1);color:#9ef3c4;border:1px dashed rgba(24,201,100,.4);margin-top:8px}
+    .config-section{margin-bottom:24px}
+    .config-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .config-title{font-size:18px;font-weight:600;color:#bcd1ef}
   </style>
 </head>
 <body>
@@ -83,12 +91,15 @@
     </div>
     {% else %}
 
-    <div class="card">
-      <div class="row">
-        <div><b>Всего устройств:</b> {{ devices|length }}</div>
-        <div class="muted small">* dev-режим = бессрочная подписка</div>
-        <div style="text-align:right"><a class="muted small" href="/admin/logout">Выйти</a></div>
+    <div class="row" style="margin-bottom:16px">
+      <div><b>Всего устройств:</b> {{ devices|length }}</div>
+      <div style="text-align:right">
+        <a href="/admin/config" class="config-btn" style="text-decoration:none;padding:8px 12px;border-radius:8px;display:inline-block">🔧 Редактировать конфиг</a>
+        <a href="/admin/logout" class="muted small" style="margin-left:16px">Выйти</a>
       </div>
+    </div>
+
+    <div class="card">
       <table>
         <thead>
           <tr>
@@ -133,13 +144,25 @@
               <form method="post" action="/admin/action">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="grant30">
-                <button class="success">Выдать 30 дней</button>
+                <button class="success">30 дн.</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="grant7">
+                <button class="success">7 дн.</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="grant3">
+                <button class="success">3 дн.</button>
               </form>
 
               <form method="post" action="/admin/action">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="remove_sub">
-                <button>Убрать подписку</button>
+                <button>Убрать</button>
               </form>
 
               <form method="post" action="/admin/action">
@@ -148,28 +171,10 @@
                 <button class="vio">{% if d.dev_mode %}Откл. DEV{% else %}Вкл. DEV{% endif %}</button>
               </form>
 
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="reset_free">
-                <button class="primary">Free = 3</button>
-              </form>
-
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="zero_free">
-                <button class="primary">Free = 0</button>
-              </form>
-
               <form method="post" action="/admin/action" onsubmit="return confirm('Удалить устройство?');">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="delete">
                 <button class="danger">Удалить</button>
-              </form>
-
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="clear_tx">
-                <button>Очистить TX</button>
               </form>
             </td>
           </tr>
