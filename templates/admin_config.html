@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ app_name }} — Admin Config</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg:#0b0f17;
+      --card:#121a27;
+      --muted:#9fb3ce;
+      --text:#e8f0ff;
+      --green:#18c964;
+      --red:#ff4d4f;
+      --amber:#f5a524;
+      --blue:#2f80ed;
+      --vio:#8a63d2;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font:16px/1.5 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
+      background:linear-gradient(180deg,#0b0f17 0%,#0e1522 100%) fixed;
+      color:var(--text);
+    }
+    header{
+      padding:24px 16px; text-align:center;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background:rgba(0,0,0,.2); backdrop-filter:blur(6px);
+      position:sticky; top:0; z-index:3;
+    }
+    h1{margin:0;font-size:22px;letter-spacing:.3px}
+    main{max-width:900px;margin:24px auto;padding:0 12px}
+    .card{
+      background:var(--card); border:1px solid rgba(255,255,255,.06);
+      border-radius:14px; padding:24px; margin-bottom:24px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    .muted{color:var(--muted)}
+    .form-group{margin-bottom:16px}
+    label{display:block;margin-bottom:6px;color:var(--muted);font-weight:500}
+    input[type="text"], input[type="number"]{
+      width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:#0e1522;color:#eaf2ff;outline:none;
+    }
+    button{
+      background:#1a2333;color:#cfe1ff;border:1px solid rgba(255,255,255,.08);
+      padding:10px 16px;border-radius:10px;cursor:pointer;transition:.15s;
+      font-weight:500;
+    }
+    button:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.15)}
+    .primary{background:rgba(47,128,237,.1);color:#bcd8ff;border-color:rgba(47,128,237,.35)}
+    .success{background:rgba(24,201,100,.1);color:#9ef3c4;border-color:rgba(24,201,100,.35)}
+    .danger{background:rgba(255,77,79,.08);color:#ffb4b5;border-color:rgba(255,77,79,.25)}
+    .row{display:flex;gap:12px;margin-top:12px}
+    .small{font-size:12px}
+    .error{color:var(--red);margin-bottom:12px;padding:8px;background:rgba(255,77,79,.08);border-radius:8px}
+    .actions{text-align:right;margin-top:24px}
+    .back-link{
+      display:inline-block;margin-bottom:16px;color:var(--blue);
+      text-decoration:none;border-bottom:1px dashed var(--blue);
+    }
+    .back-link:hover{opacity:0.8}
+    .config-section{margin-bottom:24px}
+    .config-title{font-size:18px;font-weight:600;color:#bcd1ef;margin-bottom:12px;display:flex;justify-content:space-between}
+    .add-btn{background:rgba(24,201,100,.1);color:#9ef3c4;border:1px dashed rgba(24,201,100,.4);padding:6px 12px;font-size:14px}
+    .remove-btn{background:rgba(255,77,79,.1);color:#ffb4b5;border:1px dashed rgba(255,77,79,.3);padding:4px 8px;font-size:12px;cursor:pointer}
+    .wallet-row, .price-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+    .wallet-name, .price-key{flex:1}
+    .wallet-addr{flex:2}
+    .price-value{flex:0.5}
+    .price-desc{flex:1.5}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ app_name }} — Конфигурация</h1>
+  </header>
+  <main>
+    <a href="/admin/dashboard" class="back-link">← Назад к устройствам</a>
+    
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    
+    <form method="post" action="/admin/config">
+      <!-- Тарифы -->
+      <div class="config-section">
+        <div class="config-title">
+          <span>Тарифы подписки</span>
+          <button type="button" class="add-btn" onclick="addPriceRow()">+ Добавить тариф</button>
+        </div>
+        
+        <div id="prices-container">
+          {% for key, info in config.prices.items() %}
+          <div class="price-row">
+            <input type="text" name="price_key_{{ loop.index0 }}" value="{{ key }}" placeholder="Ключ (3d, 7d, 30d)" class="price-key">
+            <input type="number" name="price_value_{{ loop.index0 }}" value="{{ info.usd }}" step="0.01" placeholder="Цена ($)" class="price-value">
+            <input type="text" name="price_desc_{{ loop.index0 }}" value="{{ info.desc }}" placeholder="Описание" class="price-desc">
+            <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      
+      <!-- Кошельки -->
+      <div class="config-section">
+        <div class="config-title">
+          <span>Криптокошельки</span>
+          <button type="button" class="add-btn" onclick="addWalletRow()">+ Добавить кошелек</button>
+        </div>
+        
+        <div id="wallets-container">
+          {% for name, addr in config.wallets.items() %}
+          <div class="wallet-row">
+            <input type="text" name="wallet_name_{{ loop.index0 }}" value="{{ name }}" placeholder="Название (BTC, ETH)" class="wallet-name">
+            <input type="text" name="wallet_addr_{{ loop.index0 }}" value="{{ addr }}" placeholder="Адрес кошелька" class="wallet-addr">
+            <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      
+      <div class="actions">
+        <button type="submit" class="primary" style="padding:12px 24px;font-size:16px">💾 Сохранить конфигурацию</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    let priceIndex = {{ config.prices|length }};
+    let walletIndex = {{ config.wallets|length }};
+    
+    function addPriceRow() {
+      const container = document.getElementById('prices-container');
+      const row = document.createElement('div');
+      row.className = 'price-row';
+      row.innerHTML = `
+        <input type="text" name="price_key_${priceIndex}" placeholder="Ключ (3d, 7d, 30d)" class="price-key">
+        <input type="number" name="price_value_${priceIndex}" step="0.01" placeholder="Цена ($)" class="price-value">
+        <input type="text" name="price_desc_${priceIndex}" placeholder="Описание" class="price-desc">
+        <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
+      `;
+      container.appendChild(row);
+      priceIndex++;
+    }
+    
+    function addWalletRow() {
+      const container = document.getElementById('wallets-container');
+      const row = document.createElement('div');
+      row.className = 'wallet-row';
+      row.innerHTML = `
+        <input type="text" name="wallet_name_${walletIndex}" placeholder="Название (BTC, ETH)" class="wallet-name">
+        <input type="text" name="wallet_addr_${walletIndex}" placeholder="Адрес кошелька" class="wallet-addr">
+        <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
+      `;
+      container.appendChild(row);
+      walletIndex++;
+    }
+  </script>
+</body>
+</html>
