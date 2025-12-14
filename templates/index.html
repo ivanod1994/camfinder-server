@@ -35,6 +35,10 @@
       color:#cfe1ff; text-decoration:none; border-bottom:1px dashed rgba(207,225,255,.35);
     }
     a:hover{opacity:.85}
+    .stats{display:flex;justify-content:space-around;margin:20px 0}
+    .stat-item{text-align:center}
+    .stat-value{font-size:24px;font-weight:700;color:var(--ok)}
+    .stat-label{color:var(--muted);font-size:14px}
   </style>
 </head>
 <body>
@@ -42,8 +46,25 @@
     <h1>{{ app_name }}</h1>
     <div class="ok">Server is running successfully ✅</div>
     <p>REST API доступен по маршрутам <code>/api/*</code>.</p>
+    
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-value">🚀</div>
+        <div class="stat-label">High Performance</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">💰</div>
+        <div class="stat-label">Payment System</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">📱</div>
+        <div class="stat-label">Mobile Ready</div>
+      </div>
+    </div>
+    
     <div class="actions">
       <p><a href="/admin">Открыть админ-панель</a></p>
+      <p style="margin-top:8px"><a href="/admin/config">Редактировать конфигурацию</a></p>
     </div>
   </div>
 </body>
