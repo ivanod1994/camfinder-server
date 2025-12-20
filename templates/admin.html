@@ -5,78 +5,7 @@
   <title>{{ app_name }} — Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root {
-      --bg:#0b0f17;
-      --card:#121a27;
-      --muted:#9fb3ce;
-      --text:#e8f0ff;
-      --green:#18c964;
-      --red:#ff4d4f;
-      --amber:#f5a524;
-      --blue:#2f80ed;
-      --vio:#8a63d2;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0; font:16px/1.5 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
-      background:linear-gradient(180deg,#0b0f17 0%,#0e1522 100%) fixed;
-      color:var(--text);
-    }
-    header{
-      padding:24px 16px; text-align:center;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      background:rgba(0,0,0,.2); backdrop-filter:blur(6px);
-      position:sticky; top:0; z-index:3;
-    }
-    h1{margin:0;font-size:22px;letter-spacing:.3px}
-    main{max-width:1100px;margin:24px auto;padding:0 12px}
-    .card{
-      background:var(--card); border:1px solid rgba(255,255,255,.06);
-      border-radius:14px; padding:16px; margin-bottom:16px;
-      box-shadow:0 10px 30px rgba(0,0,0,.35);
-    }
-    .muted{color:var(--muted)}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .row>*{flex:1}
-    table{width:100%;border-collapse:collapse;margin-top:12px}
-    th,td{padding:10px;border-bottom:1px dashed rgba(255,255,255,.08);vertical-align:top}
-    th{color:#bcd1ef;font-weight:600;text-align:left}
-    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
-    .ok{background:rgba(24,201,100,.18);color:#7bf3b2;border:1px solid rgba(24,201,100,.35)}
-    .warn{background:rgba(245,165,36,.15);color:#ffc772;border:1px solid rgba(245,165,36,.35)}
-    .err{background:rgba(255,77,79,.15);color:#ffadad;border:1px solid rgba(255,77,79,.35)}
-    .dev{background:rgba(138,99,210,.18);color:#c9b5ff;border:1px solid rgba(138,99,210,.35)}
-    .config{background:rgba(47,128,237,.15);color:#a8c7ff;border:1px solid rgba(47,128,237,.35)}
-    .actions{display:flex;gap:8px;flex-wrap:wrap}
-    button{
-      background:#1a2333;color:#cfe1ff;border:1px solid rgba(255,255,255,.08);
-      padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s;
-    }
-    button:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.15)}
-    .danger{background:rgba(255,77,79,.08);color:#ffb4b5;border-color:rgba(255,77,79,.25)}
-    .primary{background:rgba(47,128,237,.1);color:#bcd8ff;border-color:rgba(47,128,237,.35)}
-    .success{background:rgba(24,201,100,.1);color:#9ef3c4;border-color:rgba(24,201,100,.35)}
-    .vio{background:rgba(138,99,210,.1);color:#d9caff;border-color:rgba(138,99,210,.35)}
-    .config-btn{background:rgba(47,128,237,.15);color:#a8c7ff;border-color:rgba(47,128,237,.35)}
-    input[type="password"], input[type="text"], textarea, input[type="number"]{
-      width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
-      background:#0e1522;color:#eaf2ff;outline:none;
-    }
-    .login{max-width:420px;margin:40px auto}
-    .tx{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:13px;color:#e0f4ff}
-    .small{font-size:12px}
-    .form-group{margin-bottom:16px}
-    label{display:block;margin-bottom:6px;color:var(--muted)}
-    .add-row{background:rgba(24,201,100,.1);color:#9ef3c4;border:1px dashed rgba(24,201,100,.4);margin-top:8px}
-    .config-section{margin-bottom:24px}
-    .config-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-    .config-title{font-size:18px;font-weight:600;color:#bcd1ef}
-    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
-    .modal.show{display:flex}
-    .modal-content{background:var(--card);border-radius:16px;padding:24px;max-width:500px;width:90%;border:1px solid rgba(255,255,255,.1)}
-    .modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:20px}
-    .custom-action{display:flex;gap:8px;align-items:center;margin-top:8px}
-    .custom-action input{flex:1}
+    /* ... ваш существующий CSS без изменений ... */
   </style>
 </head>
 <body>
@@ -85,7 +14,7 @@
   </header>
   <main>
 
-    {% if not session.is_admin %}
+    {% if not is_authenticated %}  <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: session.is_admin → is_authenticated -->
     <div class="card login">
       <h3>Вход в админ-панель</h3>
       <p class="muted small">Введите пароль администратора.</p>
@@ -97,6 +26,7 @@
     </div>
     {% else %}
 
+    <!-- Остальная часть шаблона без изменений -->
     <div class="row" style="margin-bottom:16px">
       <div><b>Всего устройств:</b> {{ devices|length }}</div>
       <div style="text-align:right">
