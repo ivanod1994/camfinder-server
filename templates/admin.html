@@ -58,7 +58,7 @@
     .success{background:rgba(24,201,100,.1);color:#9ef3c4;border-color:rgba(24,201,100,.35)}
     .vio{background:rgba(138,99,210,.1);color:#d9caff;border-color:rgba(138,99,210,.35)}
     .config-btn{background:rgba(47,128,237,.15);color:#a8c7ff;border-color:rgba(47,128,237,.35)}
-    input[type="password"], input[type="text"], textarea{
+    input[type="password"], input[type="text"], textarea, input[type="number"]{
       width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
       background:#0e1522;color:#eaf2ff;outline:none;
     }
@@ -71,6 +71,12 @@
     .config-section{margin-bottom:24px}
     .config-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
     .config-title{font-size:18px;font-weight:600;color:#bcd1ef}
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+    .modal.show{display:flex}
+    .modal-content{background:var(--card);border-radius:16px;padding:24px;max-width:500px;width:90%;border:1px solid rgba(255,255,255,.1)}
+    .modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:20px}
+    .custom-action{display:flex;gap:8px;align-items:center;margin-top:8px}
+    .custom-action input{flex:1}
   </style>
 </head>
 <body>
@@ -105,7 +111,7 @@
           <tr>
             <th>Устройство</th>
             <th>Состояние</th>
-            <th>Оплата (последняя)</th>
+            <th>Платежи</th>
             <th>Попытки</th>
             <th>Действия</th>
           </tr>
@@ -133,14 +139,29 @@
               {% if d.last_tx or d.last_comment %}
                 <div>TX: {{ d.last_tx or "—" }}</div>
                 <div>Комм: {{ d.last_comment or "—" }}</div>
+                {% if d.selected_plan %}
+                <div class="small muted">План: {{ d.selected_plan }}</div>
+                {% endif %}
+                <div class="small muted">Дней: {{ d.last_plan_days or "—" }}</div>
+                <div class="small muted">Цена: {{ d.last_plan_price or "—" }}</div>
               {% else %}
                 <span class="muted small">Нет данных</span>
               {% endif %}
             </td>
             <td>
               <b>{{ d.free_left }}</b>
+              <div class="small muted">изначально: 3</div>
             </td>
             <td class="actions">
+              <!-- Кастомная подписка -->
+              <form method="post" action="/admin/action" class="custom-action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="grant_custom">
+                <input type="number" name="plan_days" placeholder="Дней" min="1" max="365" style="width:80px;padding:4px 8px;font-size:14px">
+                <button class="success" type="submit">Выдать</button>
+              </form>
+
+              <!-- Стандартные подписки -->
               <form method="post" action="/admin/action">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="grant30">
@@ -159,18 +180,41 @@
                 <button class="success">3 дн.</button>
               </form>
 
+              <!-- Управление подпиской -->
               <form method="post" action="/admin/action">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="remove_sub">
-                <button>Убрать</button>
+                <button>Убрать подписку</button>
               </form>
 
+              <!-- Управление DEV режимом -->
               <form method="post" action="/admin/action">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="toggle_dev">
                 <button class="vio">{% if d.dev_mode %}Откл. DEV{% else %}Вкл. DEV{% endif %}</button>
               </form>
 
+              <!-- Управление бесплатными попытками -->
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="reset_free">
+                <button class="primary" title="Вернуть 3 бесплатных попытки">↻ 3 попытки</button>
+              </form>
+
+              <form method="post" action="/admin/action">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="zero_free">
+                <button class="warn" title="Обнулить бесплатные попытки">0 попыток</button>
+              </form>
+
+              <!-- Очистка платежей -->
+              <form method="post" action="/admin/action" onsubmit="return confirm('Очистить историю платежей?');">
+                <input type="hidden" name="device_id" value="{{ d.device_id }}">
+                <input type="hidden" name="action" value="clear_tx">
+                <button class="warn" title="Очистить историю TX">Очистить TX</button>
+              </form>
+
+              <!-- Удаление устройства -->
               <form method="post" action="/admin/action" onsubmit="return confirm('Удалить устройство?');">
                 <input type="hidden" name="device_id" value="{{ d.device_id }}">
                 <input type="hidden" name="action" value="delete">
@@ -185,5 +229,85 @@
 
     {% endif %}
   </main>
+
+  <!-- Модальное окно для быстрых действий -->
+  <div id="quickModal" class="modal">
+    <div class="modal-content">
+      <h3>Быстрое действие</h3>
+      <div id="modalContent"></div>
+      <div class="modal-actions">
+        <button onclick="document.getElementById('quickModal').classList.remove('show')">Отмена</button>
+        <button class="primary" onclick="submitQuickAction()">Применить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Функция для показа детальной информации об устройстве
+    function showDeviceInfo(deviceId) {
+      fetch(`/api/device_full_info?device_id=${encodeURIComponent(deviceId)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            const dev = data.device;
+            const txCount = dev.tx_history ? dev.tx_history.length : 0;
+            let html = `
+              <div style="margin-bottom: 16px">
+                <h4>${dev.device_id}</h4>
+                <div class="small muted">Создано: ${dev.created_at || '—'}</div>
+                <div class="small muted">Последний визит: ${dev.last_seen || '—'}</div>
+              </div>
+              
+              <div style="margin-bottom: 16px">
+                <strong>Состояние:</strong>
+                <div>DEV режим: ${dev.dev_mode ? '✅ Включен' : '❌ Выключен'}</div>
+                <div>Подписка активна: ${dev.sub_active ? '✅ Да' : '❌ Нет'}</div>
+                <div>Истекает: ${dev.sub_expires_at || '—'}</div>
+                <div>Бесплатных попыток: ${dev.free_left}</div>
+              </div>
+              
+              <div style="margin-bottom: 16px">
+                <strong>Платежи (всего: ${txCount}):</strong>
+            `;
+            
+            if (txCount > 0) {
+              html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 8px">';
+              dev.tx_history.slice().reverse().forEach(tx => {
+                html += `
+                  <div style="border-left: 2px solid var(--blue); padding-left: 8px; margin-bottom: 8px">
+                    <div>TX: ${tx.tx || '—'}</div>
+                    <div>Комментарий: ${tx.comment || '—'}</div>
+                    <div>План: ${tx.plan || '—'} (${tx.plan_days || '?'} дней)</div>
+                    <div>Цена: ${tx.plan_price || '—'}</div>
+                    <div class="small muted">${tx.at || '—'}</div>
+                  </div>
+                `;
+              });
+              html += '</div>';
+            } else {
+              html += '<div class="muted small">Нет истории платежей</div>';
+            }
+            
+            html += '</div>';
+            
+            document.getElementById('modalContent').innerHTML = html;
+            document.getElementById('quickModal').classList.add('show');
+          }
+        });
+    }
+
+    // Обработка кастомных действий
+    function submitQuickAction() {
+      // Логика для быстрых действий
+      document.getElementById('quickModal').classList.remove('show');
+    }
+
+    // Закрытие модального окна при клике вне его
+    document.getElementById('quickModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        this.classList.remove('show');
+      }
+    });
+  </script>
 </body>
 </html>
