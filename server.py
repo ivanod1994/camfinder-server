@@ -169,7 +169,34 @@ def require_admin():
 
 @app.route("/")
 def index_page():
-    return render_template("index.html", app_name=APP_NAME)
+    data = load_db()
+    devices = list(data.get("devices", {}).values())
+    
+    # Собираем статистику
+    total_devices = len(devices)
+    
+    # Считаем активные подписки
+    active_subscriptions = 0
+    dev_mode = 0
+    total_tx = 0
+    
+    for d in devices:
+        recalc_subscription_state(d)
+        if d.get("dev_mode"):
+            dev_mode += 1
+        if d.get("sub_active") or d.get("dev_mode"):
+            active_subscriptions += 1
+        total_tx += len(d.get("tx_history", []))
+    
+    stats = {
+        "total_devices": total_devices,
+        "active_subscriptions": active_subscriptions,
+        "dev_mode": dev_mode,
+        "total_tx": total_tx,
+        "timestamp": now_utc().strftime("%Y-%m-%d %H:%M")
+    }
+    
+    return render_template("index.html", app_name=APP_NAME, stats=stats)
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
