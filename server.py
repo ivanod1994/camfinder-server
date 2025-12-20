@@ -245,8 +245,13 @@ def index_page():
     return render_template("index.html", app_name=APP_NAME, stats=stats)
 
 @app.route("/admin", methods=["GET", "POST"])
+@app.route("/admin/dashboard", methods=["GET"])  # Обрабатываем и этот путь
 def admin_page():
     """Обработка админ-входа"""
+    # Если запрос к /admin/dashboard и нет авторизации - редирект на /admin
+    if request.path == '/admin/dashboard' and not check_auth_cookie():
+        return redirect(url_for('admin_page'))
+    
     if request.method == "POST":
         password = request.form.get("password", "")
         if password == ADMIN_PASSWORD:
@@ -258,6 +263,15 @@ def admin_page():
                              app_name=APP_NAME, 
                              error="Неверный пароль", 
                              devices=[])
+    
+    # Если GET запрос и уже авторизован - перенаправляем на дашборд
+    if check_auth_cookie():
+        return redirect(url_for("admin_dashboard"))
+    
+    # Показываем форму входа
+    return render_template("admin.html", 
+                         app_name=APP_NAME, 
+                         devices=[])
     
     # Если GET запрос и уже авторизован - перенаправляем на дашборд
     if check_auth_cookie():
