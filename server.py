@@ -18,17 +18,15 @@ CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Ledevi3656610208")
 SECRET_KEY = os.environ.get("SECRET_KEY", "camfinder-secret-" + uuid.uuid4().hex)
 
-# Cколько бесплатных поисков давать изначально
+# Сколько бесплатных поисков давать изначально
 INITIAL_FREE = 3
 
 # Конфигурация по умолчанию
 DEFAULT_CONFIG = {
     "prices": {
-        "3d": {"usd": 3, "desc": "3 дня"},
-        "7d": {"usd": 6, "desc": "7 дней"},
-        "30d": {"usd": 10, "desc": "30 дней"},
-        "180d": {"usd": 30, "desc": "6 месяцев"},
-        "365d": {"usd": 50, "desc": "1 год"}
+        "3 дня": {"days": 3, "usd": 3, "rub": "50 руб.", "desc": "3 дня"},
+        "7 дней": {"days": 7, "usd": 6, "rub": "100 руб.", "desc": "7 дней"},
+        "30 дней": {"days": 30, "usd": 10, "rub": "300 руб.", "desc": "30 дней"}
     },
     "wallets": {
         "BTC": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
@@ -120,9 +118,12 @@ def ensure_device(d: Dict[str, Any], device_id: str) -> Dict[str, Any]:
             "sub_active": False,
             "sub_expires_at": None,
             "dev_mode": False,           # если True — всегда активная подписка
-            "tx_history": [],            # [{tx, comment, at}]
+            "tx_history": [],            # [{tx, comment, at, plan, plan_days, plan_price}]
             "last_tx": None,
             "last_comment": None,
+            "selected_plan": None,       # Последний выбранный план
+            "last_plan_days": None,      # Последнее количество дней
+            "last_plan_price": None,     # Последняя цена
         }
     else:
         devices[device_id]["last_seen"] = to_iso(now_utc())
@@ -154,6 +155,9 @@ def snapshot(dev: Dict[str, Any]) -> Dict[str, Any]:
         "dev_mode": bool(dev.get("dev_mode", False)),
         "last_tx": dev.get("last_tx"),
         "last_comment": dev.get("last_comment"),
+        "selected_plan": dev.get("selected_plan"),
+        "is_premium": active,
+        "sub_until": dev.get("sub_expires_at"),
     }
 
 # ------------------------------------------------------------------------------
@@ -192,7 +196,12 @@ def admin_dashboard():
             x.get("last_seen", ""),
         )
     devices.sort(key=sort_key)
-    return render_template("admin.html", app_name=APP_NAME, devices=devices)
+    
+    # Загружаем конфиг для отображения цен
+    config = load_config()
+    prices = config.get("prices", {})
+    
+    return render_template("admin.html", app_name=APP_NAME, devices=devices, prices=prices)
 
 @app.route("/admin/config", methods=["GET", "POST"])
 def admin_config():
@@ -209,12 +218,16 @@ def admin_config():
                     price_key = request.form.get(f"price_key_{idx}", "").strip()
                     price_value = request.form.get(f"price_value_{idx}", "").strip()
                     price_desc = request.form.get(f"price_desc_{idx}", "").strip()
+                    price_rub = request.form.get(f"price_rub_{idx}", "").strip()
+                    price_days = request.form.get(f"price_days_{idx}", "").strip()
                     
                     if price_key and price_value and price_desc:
                         try:
                             prices[price_key] = {
                                 "usd": float(price_value),
-                                "desc": price_desc
+                                "desc": price_desc,
+                                "rub": price_rub or f"{float(price_value) * 15:.0f} руб.",
+                                "days": int(price_days) if price_days.isdigit() else 30
                             }
                         except ValueError:
                             continue
@@ -250,12 +263,19 @@ def admin_action():
     require_admin()
     act = request.form.get("action")
     device_id = request.form.get("device_id")
+    plan_days = request.form.get("plan_days")
 
     data = load_db()
     dev = ensure_device(data, device_id)
 
-    if act == "grant30":
-        # Выдать подписку на 30 дней (перекрывает бесплатные попытки!)
+    if act == "grant_custom":
+        # Выдать подписку на указанное количество дней
+        if plan_days and plan_days.isdigit():
+            days = int(plan_days)
+            dev["sub_active"] = True
+            dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=days))
+    elif act == "grant30":
+        # Выдать подписку на 30 дней
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=30))
     elif act == "grant7":
@@ -285,6 +305,9 @@ def admin_action():
     elif act == "clear_tx":
         dev["last_tx"] = None
         dev["last_comment"] = None
+        dev["selected_plan"] = None
+        dev["last_plan_days"] = None
+        dev["last_plan_price"] = None
         dev["tx_history"] = []
 
     save_db(data)
@@ -373,13 +396,15 @@ def api_update_free_count():
 @app.route("/api/verify_payment", methods=["POST"])
 def api_verify_payment():
     """
-    Клиент отправляет TX/комментарий после оплаты. Подписку не активируем автоматически —
-    ты подтверждаешь в админке. Мы фиксируем в истории и сохраняем last_tx / last_comment.
+    Клиент отправляет TX/комментарий после оплаты. Сохраняем информацию о выбранном плане.
     """
     payload = request.get_json(force=True, silent=True) or {}
     device_id = (payload.get("device_id") or "").strip()
     tx = (payload.get("tx") or "").strip()
     comment = (payload.get("comment") or "").strip()
+    plan = (payload.get("plan") or "").strip()
+    plan_days = payload.get("plan_days")
+    plan_price = (payload.get("plan_price") or "").strip()
 
     if not device_id:
         return jsonify({"ok": False, "error": "device_id required"}), 400
@@ -392,12 +417,19 @@ def api_verify_payment():
     rec = {
         "tx": tx or None,
         "comment": comment or None,
+        "plan": plan or None,
+        "plan_days": plan_days,
+        "plan_price": plan_price or None,
         "at": to_iso(now_utc()),
+        "status": "pending",  # ожидает подтверждения
     }
     dev["tx_history"] = list(dev.get("tx_history", []))
     dev["tx_history"].append(rec)
     dev["last_tx"] = rec["tx"]
     dev["last_comment"] = rec["comment"]
+    dev["selected_plan"] = rec["plan"]
+    dev["last_plan_days"] = rec["plan_days"]
+    dev["last_plan_price"] = rec["plan_price"]
 
     save_db(data)
     return jsonify({"ok": True, "message": "TX received", "device": snapshot(dev)})
@@ -411,6 +443,21 @@ def api_get_config():
         "prices": config.get("prices", {}),
         "wallets": config.get("wallets", {}),
     })
+
+# Новый эндпоинт для получения полной информации об устройстве
+@app.route("/api/device_full_info", methods=["GET"])
+def api_device_full_info():
+    """Возвращает полную информацию об устройстве для админки."""
+    device_id = (request.args.get("device_id") or "").strip()
+    if not device_id:
+        return jsonify({"ok": False, "error": "device_id required"}), 400
+
+    data = load_db()
+    if device_id not in data.get("devices", {}):
+        return jsonify({"ok": False, "error": "Device not found"}), 404
+    
+    dev = data["devices"][device_id]
+    return jsonify({"ok": True, "device": dev})
 
 # ------------------------------------------------------------------------------
 # Запуск
