@@ -78,17 +78,18 @@ def create_auth_response(redirect_url):
     response.set_cookie(
         'admin_auth',
         ADMIN_HASH,
-        max_age=24*60*60,  # 24 часа
+        max_age=24*60*60,      # 24 часа
         httponly=True,
-        secure=True,  # Только для HTTPS
-        samesite='Lax'
+        secure=True,           # КРИТИЧЕСКИ ВАЖНО для Railway (HTTPS только)
+        samesite='Lax',
+        path='/'               # Гарантируем, что кука действует для всех путей сайта
     )
     return response
 
 def logout_response():
     """Создаем ответ для выхода (удаляем куку)"""
     response = make_response(redirect(url_for('admin_page')))
-    response.set_cookie('admin_auth', '', expires=0)
+    response.set_cookie('admin_auth', '', expires=0, path='/')
     return response
 
 # ------------------------------------------------------------------------------
@@ -166,13 +167,13 @@ def ensure_device(d: Dict[str, Any], device_id: str) -> Dict[str, Any]:
             "free_left": INITIAL_FREE,
             "sub_active": False,
             "sub_expires_at": None,
-            "dev_mode": False,           # если True — всегда активная подписка
-            "tx_history": [],            # [{tx, comment, at, plan, plan_days, plan_price}]
+            "dev_mode": False,
+            "tx_history": [],
             "last_tx": None,
             "last_comment": None,
-            "selected_plan": None,       # Последний выбранный план
-            "last_plan_days": None,      # Последнее количество дней
-            "last_plan_price": None,     # Последняя цена
+            "selected_plan": None,
+            "last_plan_days": None,
+            "last_plan_price": None,
         }
     else:
         devices[device_id]["last_seen"] = to_iso(now_utc())
@@ -284,7 +285,8 @@ def admin_dashboard():
     
     return render_template("admin.html", 
                          app_name=APP_NAME, 
-                         devices=devices)
+                         devices=devices,
+                         is_authenticated=True)  # Ключевое изменение!
 
 @app.route("/admin/config", methods=["GET", "POST"])
 @require_admin_cookie()
@@ -362,15 +364,12 @@ def admin_action():
             dev["sub_active"] = True
             dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=days))
     elif act == "grant30":
-        # Выдать подписку на 30 дней
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=30))
     elif act == "grant7":
-        # Выдать подписку на 7 дней
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=7))
     elif act == "grant3":
-        # Выдать подписку на 3 дня
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=3))
     elif act == "remove_sub":
@@ -406,15 +405,10 @@ def admin_logout():
     return logout_response()
 
 # ------------------------------------------------------------------------------
-# API: регистрация, статус, попытки, платежи, подписки
+# API
 # ------------------------------------------------------------------------------
 @app.route("/api/register_device", methods=["POST"])
 def api_register_device():
-    """
-    Вызов при первом запуске приложения и затем периодически.
-    При первом визите создаёт устройство с free_left=3.
-    Возвращает снапшот.
-    """
     payload = request.get_json(force=True, silent=True) or {}
     device_id = (payload.get("device_id") or "").strip()
     if not device_id:
@@ -427,9 +421,6 @@ def api_register_device():
 
 @app.route("/api/device_status", methods=["GET"])
 def api_device_status():
-    """
-    Клиент регулярно опрашивает. Возвращаем active, expires_at, free_left, locked.
-    """
     device_id = (request.args.get("device_id") or "").strip()
     if not device_id:
         return jsonify({"ok": False, "error": "device_id required"}), 400
@@ -439,7 +430,6 @@ def api_device_status():
     save_db(data)
     return jsonify(snapshot(dev))
 
-# Совместимость с клиентом: /api/subscriptions/status
 @app.route("/api/subscriptions/status", methods=["GET"])
 def api_subscription_status():
     device_id = (request.args.get("device_id") or "").strip()
@@ -454,10 +444,6 @@ def api_subscription_status():
 
 @app.route("/api/update_free_count", methods=["POST"])
 def api_update_free_count():
-    """
-    Клиент уменьшает счётчик бесплатных попыток после УСПЕШНОГО поиска.
-    Если есть активная подписка (или dev_mode), free_left НЕ трогаем.
-    """
     payload = request.get_json(force=True, silent=True) or {}
     device_id = (payload.get("device_id") or "").strip()
     consumed = int(payload.get("consumed", 1))
@@ -473,7 +459,6 @@ def api_update_free_count():
 
     active = bool(dev.get("sub_active")) or bool(dev.get("dev_mode"))
     if not active:
-        # уменьшаем free_left только если нет подписки
         dev["free_left"] = max(0, int(dev.get("free_left", 0)) - consumed)
 
     save_db(data)
@@ -481,9 +466,6 @@ def api_update_free_count():
 
 @app.route("/api/verify_payment", methods=["POST"])
 def api_verify_payment():
-    """
-    Клиент отправляет TX/комментарий после оплаты. Сохраняем информацию о выбранном плане.
-    """
     payload = request.get_json(force=True, silent=True) or {}
     device_id = (payload.get("device_id") or "").strip()
     tx = (payload.get("tx") or "").strip()
@@ -507,7 +489,7 @@ def api_verify_payment():
         "plan_days": plan_days,
         "plan_price": plan_price or None,
         "at": to_iso(now_utc()),
-        "status": "pending",  # ожидает подтверждения
+        "status": "pending",
     }
     dev["tx_history"] = list(dev.get("tx_history", []))
     dev["tx_history"].append(rec)
@@ -522,7 +504,6 @@ def api_verify_payment():
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
-    """Отдаёт конфигурацию: кошельки, цены, описание тарифов."""
     config = load_config()
     return jsonify({
         "ok": True,
@@ -530,10 +511,8 @@ def api_get_config():
         "wallets": config.get("wallets", {}),
     })
 
-# Новый эндпоинт для получения полной информации об устройстве
 @app.route("/api/device_full_info", methods=["GET"])
 def api_device_full_info():
-    """Возвращает полную информацию об устройстве для админки."""
     device_id = (request.args.get("device_id") or "").strip()
     if not device_id:
         return jsonify({"ok": False, "error": "device_id required"}), 400
@@ -549,6 +528,4 @@ def api_device_full_info():
 # Запуск
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
-    # локально: python server.py
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False)
