@@ -7,7 +7,8 @@
   <style>
     :root{
       --bg:#0b0f17; --card:#101826; --text:#e8f0ff; --muted:#98abc5;
-      --ok:#18c964; --line:rgba(255,255,255,.08);
+      --ok:#18c964; --warn:#f5a524; --err:#ff4d4f; --blue:#2f80ed; --vio:#8a63d2;
+      --line:rgba(255,255,255,.08);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -17,54 +18,144 @@
       color:var(--text); font:16px/1.5 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
     }
     .card{
-      width:min(720px,92vw);
+      width:min(900px,92vw);
       background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));
-      border:1px solid var(--line); border-radius:16px; padding:26px;
+      border:1px solid var(--line); border-radius:16px; padding:32px;
       box-shadow:0 30px 80px rgba(0,0,0,.35);
       text-align:center;
     }
-    h1{margin:0 0 8px; font-size:26px; letter-spacing:.3px}
-    p{margin:8px 0 0; color:var(--muted)}
-    .ok{
-      display:inline-block; margin-top:14px; padding:8px 12px;
+    h1{margin:0 0 12px; font-size:28px; letter-spacing:.3px}
+    .subtitle{color:var(--muted);margin-bottom:24px}
+    .status{
+      display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:10px 16px;
       border-radius:999px; border:1px solid rgba(24,201,100,.35);
       color:#9ff3c6; background:rgba(24,201,100,.12); font-weight:600;
     }
-    .actions{margin-top:18px}
+    .actions{margin-top:24px;display:flex;gap:16px;justify-content:center}
     a{
-      color:#cfe1ff; text-decoration:none; border-bottom:1px dashed rgba(207,225,255,.35);
+      color:#cfe1ff; text-decoration:none; border:1px solid rgba(207,225,255,.2);
+      padding:10px 18px; border-radius:10px; transition:.2s;
+      background:rgba(255,255,255,.03);
     }
-    a:hover{opacity:.85}
-    .stats{display:flex;justify-content:space-around;margin:20px 0}
-    .stat-item{text-align:center}
-    .stat-value{font-size:24px;font-weight:700;color:var(--ok)}
-    .stat-label{color:var(--muted);font-size:14px}
+    a:hover{transform:translateY(-1px);border-color:rgba(207,225,255,.4);background:rgba(255,255,255,.06)}
+    .stats-grid{
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+      gap:16px; margin:28px 0;
+    }
+    .stat-card{
+      background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:12px;
+      padding:18px; text-align:center;
+    }
+    .stat-value{
+      font-size:32px; font-weight:700; line-height:1;
+      margin-bottom:8px;
+    }
+    .stat-label{
+      color:var(--muted); font-size:14px; margin-bottom:4px;
+    }
+    .stat-desc{
+      font-size:12px; color:var(--muted); opacity:.8;
+    }
+    .badge{
+      display:inline-block; padding:4px 10px; border-radius:999px;
+      font-size:12px; font-weight:500; margin-left:8px;
+    }
+    .badge.ok{background:rgba(24,201,100,.18);color:#7bf3b2;border:1px solid rgba(24,201,100,.35)}
+    .badge.warn{background:rgba(245,165,36,.15);color:#ffc772;border:1px solid rgba(245,165,36,.35)}
+    .badge.err{background:rgba(255,77,79,.15);color:#ffadad;border:1px solid rgba(255,77,79,.35)}
+    .endpoints{
+      background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:12px;
+      padding:16px; margin-top:20px; text-align:left;
+    }
+    .endpoint{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:8px 0; border-bottom:1px dashed rgba(255,255,255,.05);
+    }
+    .endpoint:last-child{border-bottom:none}
+    .method{font-family:monospace;color:var(--vio);font-weight:500}
+    .path{font-family:monospace;color:var(--text);flex-grow:1;margin-left:12px}
+    .desc{color:var(--muted);font-size:13px}
+    .version{color:var(--muted);font-size:12px;margin-top:20px}
   </style>
 </head>
 <body>
   <div class="card">
     <h1>{{ app_name }}</h1>
-    <div class="ok">Server is running successfully ✅</div>
-    <p>REST API доступен по маршрутам <code>/api/*</code>.</p>
+    <div class="subtitle">CamFinder API Server — Панель мониторинга</div>
     
-    <div class="stats">
-      <div class="stat-item">
-        <div class="stat-value">🚀</div>
-        <div class="stat-label">High Performance</div>
+    <div class="status">
+      <span>✅ Сервер работает стабильно</span>
+      <span class="badge ok">Online</span>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_devices }}</div>
+        <div class="stat-label">Всего устройств</div>
+        <div class="stat-desc">Зарегистрированных в системе</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-value">💰</div>
-        <div class="stat-label">Payment System</div>
+      
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.active_subscriptions }}</div>
+        <div class="stat-label">Активные подписки</div>
+        <div class="stat-desc">Подключенные устройства</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-value">📱</div>
-        <div class="stat-label">Mobile Ready</div>
+      
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.dev_mode }}</div>
+        <div class="stat-label">DEV режим</div>
+        <div class="stat-desc">Бесплатный доступ</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_tx }}</div>
+        <div class="stat-label">Транзакций</div>
+        <div class="stat-desc">Всего платежей</div>
+      </div>
+    </div>
+    
+    <div class="endpoints">
+      <h3 style="margin-top:0;margin-bottom:12px">📡 Доступные API эндпоинты</h3>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <span class="path">/api/register_device</span>
+        <span class="desc">Регистрация устройства</span>
+      </div>
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <span class="path">/api/device_status</span>
+        <span class="desc">Статус устройства</span>
+      </div>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <span class="path">/api/update_free_count</span>
+        <span class="desc">Обновление попыток</span>
+      </div>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <span class="path">/api/verify_payment</span>
+        <span class="desc">Верификация платежа</span>
+      </div>
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <span class="path">/api/config</span>
+        <span class="desc">Конфигурация</span>
+      </div>
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <span class="path">/api/subscriptions/status</span>
+        <span class="desc">Статус подписки</span>
       </div>
     </div>
     
     <div class="actions">
-      <p><a href="/admin">Открыть админ-панель</a></p>
-      <p style="margin-top:8px"><a href="/admin/config">Редактировать конфигурацию</a></p>
+      <a href="/admin/dashboard">📊 Админ-панель</a>
+      <a href="/admin/config">⚙️ Конфигурация</a>
+      <a href="/api/config" target="_blank">📄 API Config</a>
+    </div>
+    
+    <div class="version">
+      Server Version 1.0 • {{ stats.timestamp or "2024" }}
     </div>
   </div>
 </body>
