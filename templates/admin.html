@@ -4,160 +4,289 @@
   <meta charset="utf-8" />
   <title>{{ app_name }} — Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
   <style>
-    /* ... ваш существующий CSS без изменений ... */
+    :root{
+      --bg:#0b0f17;
+      --card:#121a2a;
+      --card2:#0f1524;
+      --text:#e8f0ff;
+      --muted:#98abc5;
+      --ok:#18c964;
+      --warn:#f5a524;
+      --err:#ff4d4f;
+      --vio:#8a63d2;
+      --blue:#2f80ed;
+      --line:rgba(255,255,255,.08);
+    }
+
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%}
+
+    body{
+      background:
+        radial-gradient(900px 600px at 15% -10%, #12203a 0%, #0b0f17 60%) fixed;
+      color:var(--text);
+      font:14px/1.45 system-ui,Segoe UI,Roboto,Ubuntu,sans-serif;
+    }
+
+    header{
+      position:sticky;top:0;z-index:10;
+      background:rgba(11,15,23,.85);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);
+      padding:14px 24px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    header h1{
+      margin:0;
+      font-size:20px;
+      font-weight:600;
+      letter-spacing:.3px;
+    }
+
+    header .right a{
+      margin-left:14px;
+      color:var(--muted);
+      text-decoration:none;
+      font-size:13px;
+    }
+
+    header .right a:hover{color:#fff}
+
+    main{
+      max-width:1400px;
+      margin:0 auto;
+      padding:24px;
+    }
+
+    /* cards */
+    .card{
+      background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:20px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);
+    }
+
+    .stats{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:16px;
+      margin-bottom:24px;
+    }
+
+    .stat{
+      background:var(--card2);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:16px;
+    }
+
+    .stat b{
+      font-size:26px;
+      display:block;
+      margin-bottom:6px;
+    }
+
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+
+    /* badges */
+    .badge{
+      display:inline-block;
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:500;
+      border:1px solid transparent;
+    }
+
+    .badge.ok{background:rgba(24,201,100,.15);color:#8df3bc;border-color:rgba(24,201,100,.35)}
+    .badge.err{background:rgba(255,77,79,.15);color:#ffb3b3;border-color:rgba(255,77,79,.35)}
+    .badge.dev{background:rgba(138,99,210,.18);color:#d1baff;border-color:rgba(138,99,210,.35)}
+
+    /* table */
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:12px;
+    }
+
+    th,td{
+      padding:12px;
+      border-bottom:1px solid var(--line);
+      vertical-align:top;
+    }
+
+    th{
+      text-align:left;
+      color:var(--muted);
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+    }
+
+    tr:hover td{
+      background:rgba(255,255,255,.02);
+    }
+
+    /* buttons */
+    button{
+      background:#1a2438;
+      color:var(--text);
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+    }
+
+    button:hover{background:#222f48}
+
+    .success{border-color:rgba(24,201,100,.5);color:#9ff3c6}
+    .danger{border-color:rgba(255,77,79,.5);color:#ffadad}
+    .warn{border-color:rgba(245,165,36,.5);color:#ffd38a}
+    .vio{border-color:rgba(138,99,210,.5);color:#d1baff}
+    .primary{border-color:rgba(47,128,237,.5);color:#bcd7ff}
+
+    input{
+      background:#0d1424;
+      border:1px solid var(--line);
+      border-radius:6px;
+      padding:6px 8px;
+      color:var(--text);
+      font-size:12px;
+    }
+
+    .actions form{
+      display:inline-flex;
+      gap:6px;
+      margin:2px 0;
+    }
+
+    .tx{
+      font-family:monospace;
+      font-size:12px;
+    }
+
+    .login{
+      max-width:360px;
+      margin:60px auto;
+      text-align:center;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>{{ app_name }} — Admin</h1>
-  </header>
-  <main>
 
-    {% if not is_authenticated %}  <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: session.is_admin → is_authenticated -->
-    <div class="card login">
-      <h3>Вход в админ-панель</h3>
-      <p class="muted small">Введите пароль администратора.</p>
-      {% if error %}<p class="err badge">{{ error }}</p>{% endif %}
-      <form method="post" action="/admin">
-        <p><input type="password" name="password" placeholder="Пароль администратора" autofocus></p>
-        <p><button class="primary">Войти</button></p>
+<header>
+  <h1>{{ app_name }} — Admin</h1>
+  <div class="right">
+    <a href="/admin/config">⚙️ Конфигурация</a>
+    <a href="/admin/logout">Выйти</a>
+  </div>
+</header>
+
+<main>
+
+{% if not is_authenticated %}
+  <div class="card login">
+    <h3>Вход в админ-панель</h3>
+    <p class="muted small">Введите пароль администратора</p>
+    {% if error %}<p class="badge err">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin">
+      <p><input type="password" name="password" placeholder="Пароль" autofocus></p>
+      <p><button class="primary">Войти</button></p>
+    </form>
+  </div>
+
+{% else %}
+
+<div class="stats">
+  <div class="stat">
+    <b>{{ devices|length }}</b>
+    <div class="muted small">Всего устройств</div>
+  </div>
+</div>
+
+<div class="card">
+<table>
+  <thead>
+    <tr>
+      <th>Устройство</th>
+      <th>Статус</th>
+      <th>Платежи</th>
+      <th>Попытки</th>
+      <th>Действия</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in devices %}
+  <tr>
+    <td>
+      <b>{{ d.device_id }}</b>
+      <div class="small muted">seen: {{ d.last_seen or "—" }}</div>
+    </td>
+
+    <td>
+      {% if d.dev_mode %}
+        <span class="badge dev">DEV</span>
+      {% elif d.sub_active %}
+        <span class="badge ok">Активна</span>
+      {% else %}
+        <span class="badge err">Нет</span>
+      {% endif %}
+    </td>
+
+    <td class="tx">
+      {% if d.last_tx %}
+        TX: {{ d.last_tx }}<br>
+        {{ d.last_plan_days }} дн / {{ d.last_plan_price }}
+      {% else %}
+        <span class="muted">—</span>
+      {% endif %}
+    </td>
+
+    <td>
+      <b>{{ d.free_left }}</b>
+    </td>
+
+    <td class="actions">
+      <form method="post" action="/admin/action">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="grant7">
+        <button class="success">+7</button>
       </form>
-    </div>
-    {% else %}
 
-    <!-- Остальная часть шаблона без изменений -->
-    <div class="row" style="margin-bottom:16px">
-      <div><b>Всего устройств:</b> {{ devices|length }}</div>
-      <div style="text-align:right">
-        <a href="/admin/config" class="config-btn" style="text-decoration:none;padding:8px 12px;border-radius:8px;display:inline-block">🔧 Редактировать конфиг</a>
-        <a href="/admin/logout" class="muted small" style="margin-left:16px">Выйти</a>
-      </div>
-    </div>
+      <form method="post" action="/admin/action">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="grant30">
+        <button class="success">+30</button>
+      </form>
 
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Устройство</th>
-            <th>Состояние</th>
-            <th>Платежи</th>
-            <th>Попытки</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in devices %}
-          {% set active = d.sub_active or d.dev_mode %}
-          <tr>
-            <td>
-              <div><b>{{ d.device_id }}</b></div>
-              <div class="small muted">seen: {{ d.last_seen or "—" }}</div>
-              <div class="small muted">created: {{ d.created_at or "—" }}</div>
-            </td>
-            <td>
-              {% if d.dev_mode %}
-                <span class="badge dev">DEV (бессрочно)</span>
-              {% elif d.sub_active %}
-                <span class="badge ok">Подписка активна</span>
-                <div class="small muted">до: {{ d.sub_expires_at or "—" }}</div>
-              {% else %}
-                <span class="badge err">Нет подписки</span>
-              {% endif %}
-            </td>
-            <td class="tx">
-              {% if d.last_tx or d.last_comment %}
-                <div>TX: {{ d.last_tx or "—" }}</div>
-                <div>Комм: {{ d.last_comment or "—" }}</div>
-                {% if d.selected_plan %}
-                <div class="small muted">План: {{ d.selected_plan }}</div>
-                {% endif %}
-                <div class="small muted">Дней: {{ d.last_plan_days or "—" }}</div>
-                <div class="small muted">Цена: {{ d.last_plan_price or "—" }}</div>
-              {% else %}
-                <span class="muted small">Нет данных</span>
-              {% endif %}
-            </td>
-            <td>
-              <b>{{ d.free_left }}</b>
-              <div class="small muted">изначально: 3</div>
-            </td>
-            <td class="actions">
-              <!-- Кастомная подписка -->
-              <form method="post" action="/admin/action" class="custom-action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="grant_custom">
-                <input type="number" name="plan_days" placeholder="Дней" min="1" max="365" style="width:80px;padding:4px 8px;font-size:14px">
-                <button class="success" type="submit">Выдать</button>
-              </form>
+      <form method="post" action="/admin/action">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="toggle_dev">
+        <button class="vio">DEV</button>
+      </form>
 
-              <!-- Стандартные подписки -->
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="grant30">
-                <button class="success">30 дн.</button>
-              </form>
+      <form method="post" action="/admin/action">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="delete">
+        <button class="danger">✖</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="grant7">
-                <button class="success">7 дн.</button>
-              </form>
+{% endif %}
 
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="grant3">
-                <button class="success">3 дн.</button>
-              </form>
-
-              <!-- Управление подпиской -->
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="remove_sub">
-                <button>Убрать подписку</button>
-              </form>
-
-              <!-- Управление DEV режимом -->
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="toggle_dev">
-                <button class="vio">{% if d.dev_mode %}Откл. DEV{% else %}Вкл. DEV{% endif %}</button>
-              </form>
-
-              <!-- Управление бесплатными попытками -->
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="reset_free">
-                <button class="primary" title="Вернуть 3 бесплатных попытки">↻ 3 попытки</button>
-              </form>
-
-              <form method="post" action="/admin/action">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="zero_free">
-                <button class="warn" title="Обнулить бесплатные попытки">0 попыток</button>
-              </form>
-
-              <!-- Очистка платежей -->
-              <form method="post" action="/admin/action" onsubmit="return confirm('Очистить историю платежей?');">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="clear_tx">
-                <button class="warn" title="Очистить историю TX">Очистить TX</button>
-              </form>
-
-              <!-- Удаление устройства -->
-              <form method="post" action="/admin/action" onsubmit="return confirm('Удалить устройство?');">
-                <input type="hidden" name="device_id" value="{{ d.device_id }}">
-                <input type="hidden" name="action" value="delete">
-                <button class="danger">Удалить</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    {% endif %}
-  </main>
+</main>
 </body>
 </html>
