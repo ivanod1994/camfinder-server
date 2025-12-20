@@ -29,7 +29,7 @@
       position:sticky; top:0; z-index:3;
     }
     h1{margin:0;font-size:22px;letter-spacing:.3px}
-    main{max-width:900px;margin:24px auto;padding:0 12px}
+    main{max-width:1100px;margin:24px auto;padding:0 12px}
     .card{
       background:var(--card); border:1px solid rgba(255,255,255,.06);
       border-radius:14px; padding:24px; margin-bottom:24px;
@@ -60,15 +60,21 @@
       text-decoration:none;border-bottom:1px dashed var(--blue);
     }
     .back-link:hover{opacity:0.8}
-    .config-section{margin-bottom:24px}
-    .config-title{font-size:18px;font-weight:600;color:#bcd1ef;margin-bottom:12px;display:flex;justify-content:space-between}
+    .config-section{margin-bottom:32px}
+    .config-title{font-size:18px;font-weight:600;color:#bcd1ef;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
     .add-btn{background:rgba(24,201,100,.1);color:#9ef3c4;border:1px dashed rgba(24,201,100,.4);padding:6px 12px;font-size:14px}
-    .remove-btn{background:rgba(255,77,79,.1);color:#ffb4b5;border:1px dashed rgba(255,77,79,.3);padding:4px 8px;font-size:12px;cursor:pointer}
+    .remove-btn{background:rgba(255,77,79,.1);color:#ffb4b5;border:1px dashed rgba(255,77,79,.3);padding:6px 10px;font-size:12px;cursor:pointer;border-radius:6px}
     .wallet-row, .price-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
-    .wallet-name, .price-key{flex:1}
-    .wallet-addr{flex:2}
-    .price-value{flex:0.5}
+    .wallet-name{flex:1}
+    .wallet-addr{flex:3}
+    .price-key{flex:1}
+    .price-usd{flex:0.6}
+    .price-days{flex:0.6}
+    .price-rub{flex:1}
     .price-desc{flex:1.5}
+    .field-header{display:flex;gap:8px;margin-bottom:8px;padding:0 4px}
+    .field-header>div{font-size:12px;color:var(--muted);font-weight:500}
+    .info-text{color:var(--muted);font-size:13px;margin-top:4px}
   </style>
 </head>
 <body>
@@ -90,16 +96,28 @@
           <button type="button" class="add-btn" onclick="addPriceRow()">+ Добавить тариф</button>
         </div>
         
+        <div class="field-header">
+          <div class="price-key">Ключ тарифа</div>
+          <div class="price-usd">Цена (USD)</div>
+          <div class="price-days">Дни</div>
+          <div class="price-rub">Цена (RUB)</div>
+          <div class="price-desc">Описание</div>
+          <div style="width:40px"></div>
+        </div>
+        
         <div id="prices-container">
           {% for key, info in config.prices.items() %}
           <div class="price-row">
-            <input type="text" name="price_key_{{ loop.index0 }}" value="{{ key }}" placeholder="Ключ (3d, 7d, 30d)" class="price-key">
-            <input type="number" name="price_value_{{ loop.index0 }}" value="{{ info.usd }}" step="0.01" placeholder="Цена ($)" class="price-value">
-            <input type="text" name="price_desc_{{ loop.index0 }}" value="{{ info.desc }}" placeholder="Описание" class="price-desc">
+            <input type="text" name="price_key_{{ loop.index0 }}" value="{{ key }}" placeholder="3 дня, 7 дней, 30 дней" class="price-key" required>
+            <input type="number" name="price_value_{{ loop.index0 }}" value="{{ info.usd }}" step="0.01" placeholder="0.00" class="price-usd" required>
+            <input type="number" name="price_days_{{ loop.index0 }}" value="{{ info.days }}" placeholder="3, 7, 30" class="price-days" required>
+            <input type="text" name="price_rub_{{ loop.index0 }}" value="{{ info.rub }}" placeholder="50 руб." class="price-rub" required>
+            <input type="text" name="price_desc_{{ loop.index0 }}" value="{{ info.desc }}" placeholder="3 дня доступа" class="price-desc" required>
             <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
           </div>
           {% endfor %}
         </div>
+        <div class="info-text">Ключ тарифа должен быть уникальным (например: "3 дня", "7 дней", "30 дней")</div>
       </div>
       
       <!-- Кошельки -->
@@ -109,18 +127,45 @@
           <button type="button" class="add-btn" onclick="addWalletRow()">+ Добавить кошелек</button>
         </div>
         
+        <div class="field-header">
+          <div class="wallet-name">Название</div>
+          <div class="wallet-addr">Адрес кошелька</div>
+          <div style="width:40px"></div>
+        </div>
+        
         <div id="wallets-container">
           {% for name, addr in config.wallets.items() %}
           <div class="wallet-row">
-            <input type="text" name="wallet_name_{{ loop.index0 }}" value="{{ name }}" placeholder="Название (BTC, ETH)" class="wallet-name">
-            <input type="text" name="wallet_addr_{{ loop.index0 }}" value="{{ addr }}" placeholder="Адрес кошелька" class="wallet-addr">
+            <input type="text" name="wallet_name_{{ loop.index0 }}" value="{{ name }}" placeholder="BTC, ETH, USDT" class="wallet-name" required>
+            <input type="text" name="wallet_addr_{{ loop.index0 }}" value="{{ addr }}" placeholder="Адрес кошелька" class="wallet-addr" required>
             <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
           </div>
           {% endfor %}
         </div>
+        <div class="info-text">Названия должны быть уникальными (например: BTC, ETH, USDT)</div>
+      </div>
+      
+      <!-- Дополнительные настройки -->
+      <div class="config-section">
+        <div class="config-title">
+          <span>Системные настройки</span>
+        </div>
+        
+        <div class="form-group">
+          <label>Количество бесплатных попыток (по умолчанию)</label>
+          <input type="number" name="initial_free" value="3" min="0" max="100" readonly style="background:rgba(255,255,255,.05);color:var(--muted)">
+          <div class="info-text">Изменяется только в коде сервера (INITIAL_FREE = 3)</div>
+        </div>
+        
+        <div class="form-group">
+          <label>Пароль администратора</label>
+          <input type="text" name="admin_password" value="********" readonly style="background:rgba(255,255,255,.05);color:var(--muted)">
+          <div class="info-text">Устанавливается через переменную окружения ADMIN_PASSWORD</div>
+        </div>
       </div>
       
       <div class="actions">
+        <button type="button" class="danger" onclick="if(confirm('Сбросить к настройкам по умолчанию?')) resetToDefault()">Сбросить по умолчанию</button>
         <button type="submit" class="primary" style="padding:12px 24px;font-size:16px">💾 Сохранить конфигурацию</button>
       </div>
     </form>
@@ -135,9 +180,11 @@
       const row = document.createElement('div');
       row.className = 'price-row';
       row.innerHTML = `
-        <input type="text" name="price_key_${priceIndex}" placeholder="Ключ (3d, 7d, 30d)" class="price-key">
-        <input type="number" name="price_value_${priceIndex}" step="0.01" placeholder="Цена ($)" class="price-value">
-        <input type="text" name="price_desc_${priceIndex}" placeholder="Описание" class="price-desc">
+        <input type="text" name="price_key_${priceIndex}" placeholder="3 дня" class="price-key" required>
+        <input type="number" name="price_value_${priceIndex}" step="0.01" placeholder="3.00" class="price-usd" required>
+        <input type="number" name="price_days_${priceIndex}" placeholder="3" class="price-days" required>
+        <input type="text" name="price_rub_${priceIndex}" placeholder="50 руб." class="price-rub" required>
+        <input type="text" name="price_desc_${priceIndex}" placeholder="3 дня доступа" class="price-desc" required>
         <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
       `;
       container.appendChild(row);
@@ -149,12 +196,55 @@
       const row = document.createElement('div');
       row.className = 'wallet-row';
       row.innerHTML = `
-        <input type="text" name="wallet_name_${walletIndex}" placeholder="Название (BTC, ETH)" class="wallet-name">
-        <input type="text" name="wallet_addr_${walletIndex}" placeholder="Адрес кошелька" class="wallet-addr">
+        <input type="text" name="wallet_name_${walletIndex}" placeholder="BTC" class="wallet-name" required>
+        <input type="text" name="wallet_addr_${walletIndex}" placeholder="bc1q..." class="wallet-addr" required>
         <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
       `;
       container.appendChild(row);
       walletIndex++;
+    }
+    
+    function resetToDefault() {
+      const defaultPrices = {
+        "3 дня": {usd: 3, days: 3, rub: "50 руб.", desc: "3 дня"},
+        "7 дней": {usd: 6, days: 7, rub: "100 руб.", desc: "7 дней"},
+        "30 дней": {usd: 10, days: 30, rub: "300 руб.", desc: "30 дней"}
+      };
+      
+      const defaultWallets = {
+        "BTC": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+        "ETH": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+        "USDT": "THXrLBqa1QE1ZNFh2p48bWfQKYEDnTSYwT"
+      };
+      
+      // Очищаем контейнеры
+      document.getElementById('prices-container').innerHTML = '';
+      document.getElementById('wallets-container').innerHTML = '';
+      
+      // Добавляем цены по умолчанию
+      priceIndex = 0;
+      for (const [key, info] of Object.entries(defaultPrices)) {
+        addPriceRow();
+        const lastRow = document.querySelector('#prices-container .price-row:last-child');
+        const inputs = lastRow.querySelectorAll('input');
+        inputs[0].value = key;
+        inputs[1].value = info.usd;
+        inputs[2].value = info.days;
+        inputs[3].value = info.rub;
+        inputs[4].value = info.desc;
+      }
+      
+      // Добавляем кошельки по умолчанию
+      walletIndex = 0;
+      for (const [name, addr] of Object.entries(defaultWallets)) {
+        addWalletRow();
+        const lastRow = document.querySelector('#wallets-container .wallet-row:last-child');
+        const inputs = lastRow.querySelectorAll('input');
+        inputs[0].value = name;
+        inputs[1].value = addr;
+      }
+      
+      alert('Конфигурация сброшена к значениям по умолчанию. Не забудьте сохранить!');
     }
   </script>
 </body>
