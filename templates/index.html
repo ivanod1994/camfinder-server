@@ -61,8 +61,6 @@
       font-size:12px; font-weight:500; margin-left:8px;
     }
     .badge.ok{background:rgba(24,201,100,.18);color:#7bf3b2;border:1px solid rgba(24,201,100,.35)}
-    .badge.warn{background:rgba(245,165,36,.15);color:#ffc772;border:1px solid rgba(245,165,36,.35)}
-    .badge.err{background:rgba(255,77,79,.15);color:#ffadad;border:1px solid rgba(255,77,79,.35)}
     .endpoints{
       background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:12px;
       padding:16px; margin-top:20px; text-align:left;
@@ -82,78 +80,38 @@
   <div class="card">
     <h1>{{ app_name }}</h1>
     <div class="subtitle">CamFinder API Server — Панель мониторинга</div>
-    
+
     <div class="status">
       <span>✅ Сервер работает стабильно</span>
       <span class="badge ok">Online</span>
     </div>
-    
+
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value">{{ stats.total_devices }}</div>
         <div class="stat-label">Всего устройств</div>
-        <div class="stat-desc">Зарегистрированных в системе</div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-value">{{ stats.active_subscriptions }}</div>
         <div class="stat-label">Активные подписки</div>
-        <div class="stat-desc">Подключенные устройства</div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-value">{{ stats.dev_mode }}</div>
         <div class="stat-label">DEV режим</div>
-        <div class="stat-desc">Бесплатный доступ</div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-value">{{ stats.total_tx }}</div>
         <div class="stat-label">Транзакций</div>
-        <div class="stat-desc">Всего платежей</div>
       </div>
     </div>
-    
-    <div class="endpoints">
-      <h3 style="margin-top:0;margin-bottom:12px">📡 Доступные API эндпоинты</h3>
-      <div class="endpoint">
-        <span class="method">POST</span>
-        <span class="path">/api/register_device</span>
-        <span class="desc">Регистрация устройства</span>
-      </div>
-      <div class="endpoint">
-        <span class="method">GET</span>
-        <span class="path">/api/device_status</span>
-        <span class="desc">Статус устройства</span>
-      </div>
-      <div class="endpoint">
-        <span class="method">POST</span>
-        <span class="path">/api/update_free_count</span>
-        <span class="desc">Обновление попыток</span>
-      </div>
-      <div class="endpoint">
-        <span class="method">POST</span>
-        <span class="path">/api/verify_payment</span>
-        <span class="desc">Верификация платежа</span>
-      </div>
-      <div class="endpoint">
-        <span class="method">GET</span>
-        <span class="path">/api/config</span>
-        <span class="desc">Конфигурация</span>
-      </div>
-      <div class="endpoint">
-        <span class="method">GET</span>
-        <span class="path">/api/subscriptions/status</span>
-        <span class="desc">Статус подписки</span>
-      </div>
-    </div>
-    
+
     <div class="actions">
-      <a href="/admin/dashboard">📊 Админ-панель</a>
-      <a href="/admin/config">⚙️ Конфигурация</a>
+      <!-- ВАЖНО: ТОЛЬКО /admin -->
+      <a href="/admin">📊 Админ-панель</a>
+      <a href="/admin">⚙️ Конфигурация</a>
       <a href="/api/config" target="_blank">📄 API Config</a>
     </div>
-    
+
     <div class="version">
       Server Version 1.0 • {{ stats.timestamp or "2024" }}
     </div>
