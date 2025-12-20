@@ -37,6 +37,8 @@ DEFAULT_CONFIG = {
 
 app = Flask(__name__, template_folder="templates", static_folder=None)
 app.config["SECRET_KEY"] = SECRET_KEY
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 _db_lock = threading.Lock()
@@ -204,12 +206,16 @@ def admin_page():
         password = request.form.get("password", "")
         if password == ADMIN_PASSWORD:
             session["is_admin"] = True
+            session.permanent = True  # Ключевая строка - сохраняем сессию
             return redirect(url_for("admin_dashboard"))
         return render_template("admin.html", app_name=APP_NAME, error="Неверный пароль", devices=[])
-    if not session.get("is_admin"):
-        return render_template("admin.html", app_name=APP_NAME, devices=[])
-    # уже залогинен — на дашборд
-    return redirect(url_for("admin_dashboard"))
+    
+    # Если GET запрос и уже авторизован - перенаправляем на дашборд
+    if session.get("is_admin"):
+        return redirect(url_for("admin_dashboard"))
+    
+    # Показываем форму входа
+    return render_template("admin.html", app_name=APP_NAME, devices=[])
 
 @app.route("/admin/dashboard")
 def admin_dashboard():
