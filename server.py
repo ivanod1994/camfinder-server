@@ -3,12 +3,13 @@ import os
 import json
 import threading
 import uuid
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any
+from functools import wraps
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, abort
+from flask import Flask, request, jsonify, render_template, redirect, url_for, make_response, abort
 from flask_cors import CORS
-from flask_session import Session  # Импортируем Flask-Session
 
 # ------------------------------------------------------------------------------
 # Конфигурация
@@ -18,6 +19,9 @@ DB_FILE = os.environ.get("DEVICES_DB", "devices.json")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Ledevi3656610208")
 SECRET_KEY = os.environ.get("SECRET_KEY", "camfinder-secret-" + uuid.uuid4().hex)
+
+# Создаем хеш пароля для проверки куки
+ADMIN_HASH = hashlib.sha256((ADMIN_PASSWORD + SECRET_KEY).encode()).hexdigest()
 
 # Сколько бесплатных поисков давать изначально
 INITIAL_FREE = 3
@@ -36,30 +40,56 @@ DEFAULT_CONFIG = {
     }
 }
 
-# Инициализация Flask с правильными настройками для продакшена
 app = Flask(__name__, template_folder="templates", static_folder=None)
-
-# КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ RAILWAY
-app.config.update(
-    SECRET_KEY=SECRET_KEY,
-    # Используем серверную сессию (более надежно)
-    SESSION_TYPE='filesystem',  # Для Railway лучше использовать 'redis', но filesystem проще для начала
-    SESSION_PERMANENT=True,
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
-    SESSION_COOKIE_SECURE=True,  # Только HTTPS (важно для Railway!)
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',  # Защита от CSRF
-    # Дополнительные настройки для совместимости с прокси Railway
-    PREFERRED_URL_SCHEME='https'
-)
-
-# Инициализируем расширение сессий
-Session(app)
-
+app.config["SECRET_KEY"] = SECRET_KEY
+app.config["SESSION_COOKIE_SECURE"] = True  # Для Railway HTTPS
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 _db_lock = threading.Lock()
 _config_lock = threading.Lock()
+
+# ------------------------------------------------------------------------------
+# Утилиты авторизации (ПРОСТАЯ СИСТЕМА НА КУКАХ)
+# ------------------------------------------------------------------------------
+def check_auth_cookie():
+    """Проверяем авторизационную куку"""
+    auth_cookie = request.cookies.get('admin_auth')
+    if not auth_cookie:
+        return False
+    
+    # Сравниваем хеш в куке с правильным хешем
+    return auth_cookie == ADMIN_HASH
+
+def require_admin_cookie():
+    """Декоратор для проверки авторизации через куку"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not check_auth_cookie():
+                abort(401, description="Требуется авторизация")
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def create_auth_response(redirect_url):
+    """Создаем ответ с установкой авторизационной куки"""
+    response = make_response(redirect(redirect_url))
+    # Устанавливаем куку на 24 часа
+    response.set_cookie(
+        'admin_auth',
+        ADMIN_HASH,
+        max_age=24*60*60,  # 24 часа
+        httponly=True,
+        secure=True,  # Только для HTTPS
+        samesite='Lax'
+    )
+    return response
+
+def logout_response():
+    """Создаем ответ для выхода (удаляем куку)"""
+    response = make_response(redirect(url_for('admin_page')))
+    response.set_cookie('admin_auth', '', expires=0)
+    return response
 
 # ------------------------------------------------------------------------------
 # Утилиты
@@ -182,11 +212,6 @@ def snapshot(dev: Dict[str, Any]) -> Dict[str, Any]:
 # ------------------------------------------------------------------------------
 # HTML: главная + админ
 # ------------------------------------------------------------------------------
-def require_admin():
-    """Декоратор для проверки администратора"""
-    if not session.get("is_admin"):
-        abort(401, description="Требуется авторизация")
-
 @app.route("/")
 def index_page():
     data = load_db()
@@ -224,18 +249,17 @@ def admin_page():
     if request.method == "POST":
         password = request.form.get("password", "")
         if password == ADMIN_PASSWORD:
-            session["is_admin"] = True
-            session.modified = True  # Явно указываем, что сессия изменена
-            print(f"[DEBUG] Session created: {session.get('is_admin')}")  # Для логов
-            return redirect(url_for("admin_dashboard"))
+            # Успешный вход - устанавливаем куку и редиректим
+            return create_auth_response(url_for("admin_dashboard"))
         
+        # Неверный пароль
         return render_template("admin.html", 
                              app_name=APP_NAME, 
                              error="Неверный пароль", 
                              devices=[])
     
-    # Если уже авторизован - на дашборд
-    if session.get("is_admin"):
+    # Если GET запрос и уже авторизован - перенаправляем на дашборд
+    if check_auth_cookie():
         return redirect(url_for("admin_dashboard"))
     
     # Показываем форму входа
@@ -244,9 +268,9 @@ def admin_page():
                          devices=[])
 
 @app.route("/admin/dashboard")
+@require_admin_cookie()
 def admin_dashboard():
     """Главная админ-панель"""
-    require_admin()
     data = load_db()
     devices = list(data.get("devices", {}).values())
     
@@ -263,9 +287,9 @@ def admin_dashboard():
                          devices=devices)
 
 @app.route("/admin/config", methods=["GET", "POST"])
+@require_admin_cookie()
 def admin_config():
     """Конфигурация"""
-    require_admin()
     config = load_config()
     
     if request.method == "POST":
@@ -321,9 +345,9 @@ def admin_config():
                          config=config)
 
 @app.route("/admin/action", methods=["POST"])
+@require_admin_cookie()
 def admin_action():
     """Обработка действий администратора"""
-    require_admin()
     act = request.form.get("action")
     device_id = request.form.get("device_id")
     plan_days = request.form.get("plan_days")
@@ -379,8 +403,7 @@ def admin_action():
 @app.route("/admin/logout")
 def admin_logout():
     """Выход из админки"""
-    session.pop("is_admin", None)
-    return redirect(url_for("admin_page"))
+    return logout_response()
 
 # ------------------------------------------------------------------------------
 # API: регистрация, статус, попытки, платежи, подписки
@@ -525,7 +548,7 @@ def api_device_full_info():
 # ------------------------------------------------------------------------------
 # Запуск
 # ------------------------------------------------------------------------------
-# Для Railway / Gunicorn точка входа: app
 if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
     # локально: python server.py
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
