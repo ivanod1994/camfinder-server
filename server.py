@@ -8,6 +8,7 @@ from typing import Dict, Any
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, abort
 from flask_cors import CORS
+from flask_session import Session  # Импортируем Flask-Session
 
 # ------------------------------------------------------------------------------
 # Конфигурация
@@ -35,10 +36,26 @@ DEFAULT_CONFIG = {
     }
 }
 
+# Инициализация Flask с правильными настройками для продакшена
 app = Flask(__name__, template_folder="templates", static_folder=None)
-app.config["SECRET_KEY"] = SECRET_KEY
-app.config["SESSION_PERMANENT"] = True
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
+
+# КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ RAILWAY
+app.config.update(
+    SECRET_KEY=SECRET_KEY,
+    # Используем серверную сессию (более надежно)
+    SESSION_TYPE='filesystem',  # Для Railway лучше использовать 'redis', но filesystem проще для начала
+    SESSION_PERMANENT=True,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
+    SESSION_COOKIE_SECURE=True,  # Только HTTPS (важно для Railway!)
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',  # Защита от CSRF
+    # Дополнительные настройки для совместимости с прокси Railway
+    PREFERRED_URL_SCHEME='https'
+)
+
+# Инициализируем расширение сессий
+Session(app)
+
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 _db_lock = threading.Lock()
@@ -166,8 +183,9 @@ def snapshot(dev: Dict[str, Any]) -> Dict[str, Any]:
 # HTML: главная + админ
 # ------------------------------------------------------------------------------
 def require_admin():
+    """Декоратор для проверки администратора"""
     if not session.get("is_admin"):
-        abort(401)
+        abort(401, description="Требуется авторизация")
 
 @app.route("/")
 def index_page():
@@ -202,26 +220,36 @@ def index_page():
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
+    """Обработка админ-входа"""
     if request.method == "POST":
         password = request.form.get("password", "")
         if password == ADMIN_PASSWORD:
             session["is_admin"] = True
-            session.permanent = True  # Ключевая строка - сохраняем сессию
+            session.modified = True  # Явно указываем, что сессия изменена
+            print(f"[DEBUG] Session created: {session.get('is_admin')}")  # Для логов
             return redirect(url_for("admin_dashboard"))
-        return render_template("admin.html", app_name=APP_NAME, error="Неверный пароль", devices=[])
+        
+        return render_template("admin.html", 
+                             app_name=APP_NAME, 
+                             error="Неверный пароль", 
+                             devices=[])
     
-    # Если GET запрос и уже авторизован - перенаправляем на дашборд
+    # Если уже авторизован - на дашборд
     if session.get("is_admin"):
         return redirect(url_for("admin_dashboard"))
     
     # Показываем форму входа
-    return render_template("admin.html", app_name=APP_NAME, devices=[])
+    return render_template("admin.html", 
+                         app_name=APP_NAME, 
+                         devices=[])
 
 @app.route("/admin/dashboard")
 def admin_dashboard():
+    """Главная админ-панель"""
     require_admin()
     data = load_db()
     devices = list(data.get("devices", {}).values())
+    
     # сортировка: сначала активные/в dev, потом по дате последнего появления
     def sort_key(x):
         return (
@@ -230,14 +258,13 @@ def admin_dashboard():
         )
     devices.sort(key=sort_key)
     
-    # Загружаем конфиг для отображения цен
-    config = load_config()
-    prices = config.get("prices", {})
-    
-    return render_template("admin.html", app_name=APP_NAME, devices=devices, prices=prices)
+    return render_template("admin.html", 
+                         app_name=APP_NAME, 
+                         devices=devices)
 
 @app.route("/admin/config", methods=["GET", "POST"])
 def admin_config():
+    """Конфигурация"""
     require_admin()
     config = load_config()
     
@@ -289,10 +316,13 @@ def admin_config():
                 error=f"Ошибка сохранения: {str(e)}"
             )
     
-    return render_template("admin_config.html", app_name=APP_NAME, config=config)
+    return render_template("admin_config.html", 
+                         app_name=APP_NAME, 
+                         config=config)
 
 @app.route("/admin/action", methods=["POST"])
 def admin_action():
+    """Обработка действий администратора"""
     require_admin()
     act = request.form.get("action")
     device_id = request.form.get("device_id")
@@ -348,12 +378,12 @@ def admin_action():
 
 @app.route("/admin/logout")
 def admin_logout():
+    """Выход из админки"""
     session.pop("is_admin", None)
     return redirect(url_for("admin_page"))
 
 # ------------------------------------------------------------------------------
 # API: регистрация, статус, попытки, платежи, подписки
-# И конфигурации
 # ------------------------------------------------------------------------------
 @app.route("/api/register_device", methods=["POST"])
 def api_register_device():
