@@ -70,7 +70,6 @@
     .price-key{flex:1}
     .price-usd{flex:0.6}
     .price-days{flex:0.6}
-    .price-rub{flex:1}
     .price-desc{flex:1.5}
     .field-header{display:flex;gap:8px;margin-bottom:8px;padding:0 4px}
     .field-header>div{font-size:12px;color:var(--muted);font-weight:500}
@@ -100,7 +99,6 @@
           <div class="price-key">Ключ тарифа</div>
           <div class="price-usd">Цена (USD)</div>
           <div class="price-days">Дни</div>
-          <div class="price-rub">Цена (RUB)</div>
           <div class="price-desc">Описание</div>
           <div style="width:40px"></div>
         </div>
@@ -108,10 +106,9 @@
         <div id="prices-container">
           {% for key, info in config.prices.items() %}
           <div class="price-row">
-            <input type="text" name="price_key_{{ loop.index0 }}" value="{{ key }}" placeholder="3 дня, 7 дней, 30 дней" class="price-key" required>
-            <input type="number" name="price_value_{{ loop.index0 }}" value="{{ info.usd }}" step="0.01" placeholder="0.00" class="price-usd" required>
-            <input type="number" name="price_days_{{ loop.index0 }}" value="{{ info.days }}" placeholder="3, 7, 30" class="price-days" required>
-            <input type="text" name="price_rub_{{ loop.index0 }}" value="{{ info.rub }}" placeholder="50 руб." class="price-rub" required>
+            <input type="text" name="price_key_{{ loop.index0 }}" value="{{ key }}" placeholder="3 дня" class="price-key" required>
+            <input type="number" name="price_value_{{ loop.index0 }}" value="{{ info.usd }}" step="0.01" placeholder="3.00" class="price-usd" required>
+            <input type="number" name="price_days_{{ loop.index0 }}" value="{{ info.days }}" placeholder="3" class="price-days" required>
             <input type="text" name="price_desc_{{ loop.index0 }}" value="{{ info.desc }}" placeholder="3 дня доступа" class="price-desc" required>
             <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
           </div>
@@ -183,7 +180,6 @@
         <input type="text" name="price_key_${priceIndex}" placeholder="3 дня" class="price-key" required>
         <input type="number" name="price_value_${priceIndex}" step="0.01" placeholder="3.00" class="price-usd" required>
         <input type="number" name="price_days_${priceIndex}" placeholder="3" class="price-days" required>
-        <input type="text" name="price_rub_${priceIndex}" placeholder="50 руб." class="price-rub" required>
         <input type="text" name="price_desc_${priceIndex}" placeholder="3 дня доступа" class="price-desc" required>
         <span class="remove-btn" onclick="this.parentElement.remove()">×</span>
       `;
@@ -206,9 +202,9 @@
     
     function resetToDefault() {
       const defaultPrices = {
-        "3 дня": {usd: 3, days: 3, rub: "50 руб.", desc: "3 дня"},
-        "7 дней": {usd: 6, days: 7, rub: "100 руб.", desc: "7 дней"},
-        "30 дней": {usd: 10, days: 30, rub: "300 руб.", desc: "30 дней"}
+        "3 дня": {usd: 3.0, days: 3, desc: "3 дня доступа"},
+        "7 дней": {usd: 6.0, days: 7, desc: "7 дней доступа"},
+        "30 дней": {usd: 10.0, days: 30, desc: "30 дней доступа"}
       };
       
       const defaultWallets = {
@@ -217,11 +213,9 @@
         "USDT": "THXrLBqa1QE1ZNFh2p48bWfQKYEDnTSYwT"
       };
       
-      // Очищаем контейнеры
       document.getElementById('prices-container').innerHTML = '';
       document.getElementById('wallets-container').innerHTML = '';
       
-      // Добавляем цены по умолчанию
       priceIndex = 0;
       for (const [key, info] of Object.entries(defaultPrices)) {
         addPriceRow();
@@ -230,11 +224,9 @@
         inputs[0].value = key;
         inputs[1].value = info.usd;
         inputs[2].value = info.days;
-        inputs[3].value = info.rub;
-        inputs[4].value = info.desc;
+        inputs[3].value = info.desc;
       }
       
-      // Добавляем кошельки по умолчанию
       walletIndex = 0;
       for (const [name, addr] of Object.entries(defaultWallets)) {
         addWalletRow();
