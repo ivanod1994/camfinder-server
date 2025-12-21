@@ -14,7 +14,9 @@ from flask import (
 )
 from flask_cors import CORS
 
+# ==============================================================================
 # CONFIG
+# ==============================================================================
 APP_NAME = "CamFinder API Server"
 
 DB_FILE = os.environ.get("DEVICES_DB", "devices.json")
@@ -31,9 +33,9 @@ INITIAL_FREE = 3
 
 DEFAULT_CONFIG = {
     "prices": {
-        "3 дня": {"days": 3, "usd": 3, "rub": "50 руб.", "desc": "3 дня"},
-        "7 дней": {"days": 7, "usd": 6, "rub": "100 руб.", "desc": "7 дней"},
-        "30 дней": {"days": 30, "usd": 10, "rub": "300 руб.", "desc": "30 дней"},
+        "3 дня": {"days": 3, "usd": 3.0, "desc": "3 дня доступа"},
+        "7 дней": {"days": 7, "usd": 6.0, "desc": "7 дней доступа"},
+        "30 дней": {"days": 30, "usd": 10.0, "desc": "30 дней доступа"},
     },
     "wallets": {
         "BTC": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
@@ -42,7 +44,9 @@ DEFAULT_CONFIG = {
     }
 }
 
+# ==============================================================================
 # FLASK
+# ==============================================================================
 app = Flask(__name__, template_folder="templates")
 app.config["SECRET_KEY"] = SECRET_KEY
 
@@ -51,7 +55,9 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 _db_lock = threading.Lock()
 _config_lock = threading.Lock()
 
-# AUTH (COOKIE)
+# ==============================================================================
+# AUTH
+# ==============================================================================
 def check_auth_cookie() -> bool:
     return request.cookies.get("admin_auth") == ADMIN_HASH
 
@@ -83,7 +89,9 @@ def logout_response():
     resp.set_cookie("admin_auth", "", expires=0, path="/")
     return resp
 
+# ==============================================================================
 # UTILS
+# ==============================================================================
 def now_utc():
     return datetime.utcnow()
 
@@ -180,7 +188,9 @@ def snapshot(dev: Dict[str, Any]) -> Dict[str, Any]:
         "sub_until": dev.get("sub_expires_at"),
     }
 
-# INDEX + DASHBOARD STATS
+# ==============================================================================
+# ROUTES
+# ==============================================================================
 @app.route("/")
 def index_page():
     data = load_db()
@@ -209,7 +219,6 @@ def index_page():
 
     return render_template("index.html", app_name=APP_NAME, stats=stats)
 
-# ADMIN
 @app.route("/admin", methods=["GET", "POST"])
 def admin_page():
     is_auth = check_auth_cookie()
@@ -244,8 +253,9 @@ def admin_dashboard():
     devices.sort(
         key=lambda d: (
             0 if (d.get("dev_mode") or d.get("sub_active")) else 1,
-            d.get("last_seen", ""),
-        ), reverse=True  # Новые сверху
+            d.get("last_seen", "") or "",
+        ),
+        reverse=True
     )
 
     return render_template(
@@ -269,19 +279,17 @@ def admin_config():
                 i = k.split("_")[-1]
                 key = request.form.get(f"price_key_{i}")
                 usd = request.form.get(f"price_value_{i}")
-                rub = request.form.get(f"price_rub_{i}")
                 days = request.form.get(f"price_days_{i}")
                 desc = request.form.get(f"price_desc_{i}")
                 if key and usd and days:
                     try:
                         prices[key] = {
                             "usd": float(usd),
-                            "rub": rub,
                             "days": int(days),
                             "desc": desc,
                         }
                     except ValueError:
-                        pass  # Игнор invalid
+                        pass
 
             if k.startswith("wallet_name_"):
                 i = k.split("_")[-1]
@@ -318,6 +326,17 @@ def admin_action():
     elif action == "grant30":
         dev["sub_active"] = True
         dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=30))
+    elif action == "grant_custom":
+        try:
+            days = float(request.form.get("custom_days", 0))
+            if days > 0:
+                dev["sub_active"] = True
+                dev["sub_expires_at"] = to_iso(now_utc() + timedelta(days=days))
+        except:
+            pass
+    elif action == "revoke_sub":
+        dev["sub_active"] = False
+        dev["sub_expires_at"] = None
     elif action == "toggle_dev":
         dev["dev_mode"] = not dev.get("dev_mode", False)
     elif action == "delete":
@@ -330,7 +349,9 @@ def admin_action():
 def admin_logout():
     return logout_response()
 
+# ==============================================================================
 # API
+# ==============================================================================
 @app.route("/api/register_device", methods=["POST"])
 def api_register_device():
     payload = request.get_json(force=True)
@@ -376,13 +397,13 @@ def api_verify_payment():
     device_id = payload.get("device_id")
     tx = payload.get("tx")
     plan = payload.get("plan")
+
     if not device_id or not tx or not plan:
         return jsonify(ok=False, error="Missing fields"), 400
 
     data = load_db()
     dev = ensure_device(data, device_id)
 
-    # Валидация плана (из config)
     cfg = load_config()
     if plan not in cfg["prices"]:
         return jsonify(ok=False, error="Invalid plan"), 400
@@ -394,7 +415,7 @@ def api_verify_payment():
         "comment": payload.get("comment"),
         "plan": plan,
         "plan_days": plan_info["days"],
-        "plan_price": plan_info["usd"],  # Используем USD для internal
+        "plan_price": plan_info["usd"],
         "at": to_iso(now_utc()),
         "status": "pending",
     }
@@ -414,6 +435,5 @@ def api_get_config():
     cfg = load_config()
     return jsonify(ok=True, prices=cfg["prices"], wallets=cfg["wallets"])
 
-# RUN
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
