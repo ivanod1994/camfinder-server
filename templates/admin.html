@@ -267,6 +267,21 @@
         <button class="success">+30</button>
       </form>
 
+      <!-- Ручная подписка (дни/часы) -->
+      <form method="post" action="/admin/action" style="display:inline;">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="grant_custom">
+        <input type="number" name="custom_days" placeholder="дни" step="0.01" min="0.01" style="width:55px;font-size:12px;">
+        <button class="success" style="font-size:12px;padding:4px 6px;">Дни</button>
+      </form>
+
+      <!-- Снять подписку -->
+      <form method="post" action="/admin/action">
+        <input type="hidden" name="device_id" value="{{ d.device_id }}">
+        <input type="hidden" name="action" value="revoke_sub">
+        <button class="warn">✖ Подп.</button>
+      </form>
+
       <form method="post" action="/admin/action">
         <input type="hidden" name="device_id" value="{{ d.device_id }}">
         <input type="hidden" name="action" value="toggle_dev">
